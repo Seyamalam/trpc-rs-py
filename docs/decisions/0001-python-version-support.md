@@ -1,0 +1,35 @@
+# ADR 0001: Python version support
+
+Status: Accepted
+Date: 2026-11-08
+
+## Context
+
+`trpc-rs-py` ships compiled wheels via maturin. Every supported Python version
+multiplies the number of wheels that must be built and tested, and PyO3 support
+for each Python version is bounded by the PyO3 release. Framework adapters must
+work on old and new interpreters alike (FastAPI/Starlette are async-first,
+Flask/Django are commonly sync).
+
+## Options
+
+1. `requires-python >= 3.8` — widest reach, but 3.8/3.9 are EOL, typing in
+   strict mode needs heavy backports, and modern async features are awkward.
+2. `requires-python >= 3.10` — first version with modern typing (ParamSpec,
+   TypeAlias), widely deployed, five active versions of headroom.
+3. `requires-python >= 3.12` — cleaner runtime behavior, but excludes many
+   production environments still on 3.10/3.11.
+
+## Decision
+
+Support **Python 3.10+** (`requires-python = ">=3.10"`). CI gates run on the
+local default interpreter; release wheels are built for 3.10–3.14. Type-level
+features that need newer Python are handled with `typing-extensions` and
+documented. Internally we develop against the newest interpreter (3.14).
+
+## Consequences
+
+- Wheels must be built and smoke-tested per CPython minor version.
+- `ParamSpec` and modern generics are available without backports.
+- 3.8/3.9 users are explicitly not supported; the README must say so.
+- When PyO3 drops support for a version, the floor moves up in a minor release.

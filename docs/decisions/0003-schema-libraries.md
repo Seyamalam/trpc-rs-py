@@ -1,0 +1,35 @@
+# ADR 0003: Schema libraries
+
+Status: Accepted
+Date: 2026-11-08
+
+## Context
+
+Input/output validation comes from Python type hints. The wire protocol needs a
+JSON Schema description of each procedure's input/output for TypeScript and
+Zod codegen (MISSION.md sections 2.5, 5). Candidate schema sources: Pydantic v2,
+msgspec, stdlib dataclasses, TypedDict.
+
+## Options
+
+1. **Pydantic v2 only** — richest ecosystem, first-class JSON Schema, most
+   familiar to FastAPI users; heavy dependency for users who don't want it.
+2. **Internal validation protocol** (duck-typed `SchemaProvider`) with adapters
+   per library — maximum flexibility, more work, weaker guarantees per backend.
+3. **msgspec first** — faster, but smaller ecosystem and no FastAPI integration.
+
+## Decision
+
+Support **Pydantic v2 first-class**: procedure inputs/outputs annotated with
+Pydantic models produce JSON Schema for codegen and validation behavior for
+runtime. Implement a small internal `SchemaProvider` protocol so other
+libraries (msgspec, dataclasses, TypedDict) can be added; whether and when is
+deferred to a later ADR driven by user demand, not speculation.
+
+## Consequences
+
+- Pydantic v2 is a core dependency (`pyproject.toml`).
+- The validation boundary is defined as an internal protocol from day one, so
+  adding libraries later does not require re-plumbing the router.
+- Users without Pydantic still pay the dependency until an optional-extra
+  decision is made (tracked in MEMORY.md open questions).

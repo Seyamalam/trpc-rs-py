@@ -1,0 +1,33 @@
+# ADR 0004: Standalone server framework
+
+Status: Accepted
+Date: 2026-11-08
+
+## Context
+
+The optional standalone server (MISSION.md section 3) runs the Rust HTTP
+server directly and calls Python handlers, for maximum throughput without a
+Python web framework. Candidates: `hyper` 1.x, `axum`, `actix-web`.
+
+## Options
+
+1. **hyper 1.x + http-body-util directly** — the protocol core already owns
+   routing, batching, and envelope construction; a second routing framework
+   would add layers on the hot path we are trying to make near-zero.
+2. **axum** — ergonomic, but pulls tower layers and its own router between the
+   socket and our core; harder to guarantee "near-zero overhead" claims.
+3. **actix-web** — its own executor model complicates calling into Python with
+   correct GIL handling across threads.
+
+## Decision
+
+Use **hyper 1.x** with `http-body-util` and a minimal hand-rolled dispatcher
+that feeds parsed requests straight into `trpc-core`. SSE subscriptions need
+long-lived response bodies; hyper supports streaming bodies natively.
+
+## Consequences
+
+- No framework abstractions to fight when measuring per-request overhead.
+- We own keep-alive, graceful shutdown, and connection limits explicitly.
+- If this proves too raw, axum can wrap the same core later without breaking
+  the Python API (decision is internal to the standalone binary).
