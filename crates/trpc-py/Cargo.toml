@@ -1,0 +1,24 @@
+[package]
+name = "trpc-py"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "PyO3 bindings for trpc-core, exposed as the Python module trpc_rs_py._core."
+
+[lib]
+name = "trpc_rs_py"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.29"
+trpc-core = { path = "../trpc-core" }
+
+[features]
+# Enabled by maturin at build time so `cargo test` can link libpython normally.
+extension-module = ["pyo3/extension-module"]
+
+[lints]
+workspace = true
