@@ -127,27 +127,14 @@ impl TrpcError {
         }
     }
 
-    /// Serialize to the tRPC error JSON envelope:
-    /// `{"error":{"json":{"message":..,"code":..,"httpStatus":..,"code":..}}}`.
+    /// Serialize to the tRPC error JSON envelope with numeric code and HTTP status
+    /// in `error.json`, and the machine-readable name under `error.json.data.code`.
     ///
-    /// Note: the inner `data` object carries `code` twice per the tRPC v11
-    /// format (`data.code` is the numeric code inside `error.json.data`).
+    /// The inner `data.code` is the machine-readable code name.
     #[must_use]
     pub fn to_envelope(&self) -> String {
-        let body = serde_json::json!({
-            "error": {
-                "json": {
-                    "message": self.message,
-                    "code": self.data_code,
-                    "httpStatus": self.http_status,
-                    "data": {
-                        "code": self.code_name,
-                        "httpStatus": self.http_status,
-                    },
-                }
-            }
-        });
-        body.to_string()
+        crate::json::serialize(&crate::json::error_envelope(self))
+            .unwrap_or_else(|_| "null".to_owned())
     }
 }
 
@@ -167,7 +154,7 @@ mod tests {
     #[test]
     fn envelope_shape() {
         let err = TrpcError::new(ErrorCode::NotFound, "No procedure found on path \"x\"");
-        let json: serde_json::Value = serde_json::from_str(&err.to_envelope()).unwrap();
+        let json = crate::json::parse(err.to_envelope().as_bytes()).unwrap();
         let inner = &json["error"]["json"];
         assert_eq!(inner["message"], "No procedure found on path \"x\"");
         assert_eq!(inner["code"], -32004);
