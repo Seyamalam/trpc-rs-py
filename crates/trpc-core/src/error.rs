@@ -5,8 +5,6 @@
 //! documented HTTP status. Production mode never leaks internal messages:
 //! the serialized error shape is fixed and documented in `docs/protocol.md`.
 
-use serde::{Deserialize, Serialize};
-
 /// Official tRPC v11 error codes with their data codes and HTTP statuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
@@ -103,7 +101,7 @@ impl std::fmt::Display for ErrorCode {
 }
 
 /// A single error inside the tRPC error envelope.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrpcError {
     /// Structured error payload; opaque to the wire format.
     pub message: String,
@@ -133,6 +131,7 @@ impl TrpcError {
     /// The inner `data.code` is the machine-readable code name.
     #[must_use]
     pub fn to_envelope(&self) -> String {
+        // Serialization of serde_json::Value is infallible; this fallback is unreachable.
         crate::json::serialize(&crate::json::error_envelope(self))
             .unwrap_or_else(|_| "null".to_owned())
     }

@@ -145,9 +145,15 @@ fn query_param<'a>(query: &'a str, name: &str) -> Option<&'a str> {
     })
 }
 
+/// The effective cap is the minimum of `max_json_depth` and the parser guard in `serde_json`.
 fn input_value(input: &[u8], max_depth: usize) -> Result<json::Value, TrpcError> {
-    let value = json::parse(input)
-        .map_err(|_| protocol_error(ErrorCode::ParseError, "Invalid JSON input"))?;
+    let value = json::parse(input).map_err(|error| {
+        if json::is_recursion_limit_error(&error) {
+            protocol_error(ErrorCode::BadRequest, "JSON nesting depth exceeded")
+        } else {
+            protocol_error(ErrorCode::ParseError, "Invalid JSON input")
+        }
+    })?;
     if !json::validate_depth(&value, max_depth) {
         return Err(protocol_error(
             ErrorCode::BadRequest,
@@ -157,11 +163,10 @@ fn input_value(input: &[u8], max_depth: usize) -> Result<json::Value, TrpcError>
     Ok(value)
 }
 
-/// Parse a tRPC v11 GET query or POST mutation request.
+/// Parse a tRPC v11 query over GET or POST, or a mutation over POST.
 ///
-/// Queries are accepted only over GET and mutations only over POST. This is a
-/// deliberate project policy; see the `VERIFY(compat)` note in the method
-/// branch before relaxing it for official client method overrides.
+/// Queries are accepted over GET or POST (including official client method
+/// overrides); mutations are accepted only over POST.
 ///
 /// # Errors
 /// Returns a `TrpcError` for malformed requests or exceeded limits.
@@ -195,6 +200,13 @@ pub fn parse_request(request: Request<'_>, limits: Limits) -> Result<ParsedReque
     if paths.iter().any(|path| path.is_empty()) {
         return Err(bad_request("Procedure path is empty"));
     }
+    if paths.iter().any(|path| {
+        !path
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+    }) {
+        return Err(bad_request("Invalid procedure path"));
+    }
 
     let input = match request.method {
         HttpMethod::Get => {
@@ -217,9 +229,12 @@ pub fn parse_request(request: Request<'_>, limits: Limits) -> Result<ParsedReque
             }
         }
         HttpMethod::Post => {
-            // VERIFY(compat): this parser intentionally requires mutations via POST
-            // and queries via GET; official tRPC clients may support POST query overrides.
             if request.body.is_empty() {
+                if batched {
+                    // VERIFY(compat): official clients always send a batch body; reject empty batches.
+                    return Err(bad_request("Batched POST requests require an input body"));
+                }
+                // The official client omits the body for an undefined single-call input.
                 json::Value::Null
             } else {
                 input_value(request.body, limits.max_json_depth)?
@@ -232,12 +247,6 @@ pub fn parse_request(request: Request<'_>, limits: Limits) -> Result<ParsedReque
     } else {
         vec![input]
     };
-
-    for path in &paths {
-        if path.contains('/') || path.trim().is_empty() {
-            return Err(bad_request("Invalid procedure path"));
-        }
-    }
 
     let calls = paths
         .into_iter()
@@ -333,9 +342,10 @@ impl Router {
                 format!("No procedure found on path \"{path}\""),
             )
         })?;
+        // Mutations remain POST-only; queries also accept POST for client method overrides.
         let allowed = matches!(
             (method, procedure.kind),
-            (HttpMethod::Get, ProcedureKind::Query) | (HttpMethod::Post, ProcedureKind::Mutation)
+            (_, ProcedureKind::Query) | (HttpMethod::Post, ProcedureKind::Mutation)
         );
         if !allowed {
             return Err(TrpcError::new(
@@ -374,6 +384,7 @@ pub fn build_response(results: Vec<Result<json::Value, TrpcError>>, batched: boo
         };
         return Response {
             http_status: status,
+            // Serialization of a serde_json::Value is infallible; this fallback is unreachable.
             body: json::serialize(&envelope).unwrap_or_else(|_| "null".to_owned()),
         };
     }
@@ -397,6 +408,7 @@ pub fn build_response(results: Vec<Result<json::Value, TrpcError>>, batched: boo
     // project rule above; confirm against the official @trpc/client in compat tests.
     Response {
         http_status: status,
+        // Serialization of serde_json::Value is infallible; this fallback is unreachable.
         body: json::serialize(&envelopes).unwrap_or_else(|_| "[]".to_owned()),
     }
 }
@@ -423,6 +435,29 @@ mod tests {
             body,
             content_length: Some(body.len()),
         }
+    }
+
+    #[test]
+    fn validates_procedure_path_charset() {
+        assert_eq!(
+            parse_request(get("post.hello world", ""), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            parse_request(get("post.你好", ""), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            parse_request(get("post.by-id_2", ""), Limits::default())
+                .unwrap()
+                .calls[0]
+                .path,
+            "post.by-id_2"
+        );
     }
 
     #[test]
@@ -549,6 +584,21 @@ mod tests {
     }
 
     #[test]
+    fn serde_json_recursion_guard_maps_to_bad_request() {
+        let nested = format!("{}0{}", "[".repeat(150), "]".repeat(150));
+        let error = parse_request(
+            post("x", "", nested.as_bytes()),
+            Limits {
+                max_json_depth: usize::MAX,
+                ..Limits::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code_name, "BAD_REQUEST");
+        assert_eq!(error.message, "JSON nesting depth exceeded");
+    }
+
+    #[test]
     fn enforces_json_depth_limit() {
         let error = parse_request(
             post("x", "", br#"{"a":{"b":1}}"#),
@@ -559,6 +609,95 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code_name, "BAD_REQUEST");
+    }
+
+    #[test]
+    fn query_decoding_handles_plus_and_invalid_utf8() {
+        let plus = parse_request(get("x", "input=%22a+b%22"), Limits::default()).unwrap();
+        assert_eq!(plus.calls[0].input, "a b");
+        let escaped_plus = parse_request(get("x", "input=%22a%2Bb%22"), Limits::default()).unwrap();
+        assert_eq!(escaped_plus.calls[0].input, "a+b");
+
+        let invalid_utf8 = parse_request(get("x", "input=%FF%FE"), Limits::default()).unwrap_err();
+        assert_eq!(invalid_utf8.code_name, "PARSE_ERROR");
+    }
+
+    #[test]
+    fn truncated_percent_escape_is_bad_request() {
+        assert_eq!(
+            parse_request(get("x", "input=%7"), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn missing_and_empty_single_inputs_are_null() {
+        let get_request = parse_request(get("x", ""), Limits::default()).unwrap();
+        assert_eq!(get_request.calls[0].input, json::Value::Null);
+        let post_request = parse_request(post("x", "", b""), Limits::default()).unwrap();
+        assert_eq!(post_request.calls[0].input, json::Value::Null);
+    }
+
+    #[test]
+    fn empty_batched_post_body_is_bad_request() {
+        assert_eq!(
+            parse_request(post("a,b", "batch=1", b""), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn sparse_batch_keys_are_bad_request() {
+        assert_eq!(
+            parse_request(
+                post("a,b", "batch=1", br#"{"0":1,"2":2}"#),
+                Limits::default()
+            )
+            .unwrap_err()
+            .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn actual_body_length_overrides_small_content_length() {
+        let request = Request {
+            content_length: Some(1),
+            ..post("x", "", br#"{"long":"payload"}"#)
+        };
+        assert_eq!(
+            parse_request(
+                request,
+                Limits {
+                    max_body_size: 4,
+                    ..Limits::default()
+                }
+            )
+            .unwrap_err()
+            .code_name,
+            "PAYLOAD_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn batched_get_requires_object_input() {
+        assert_eq!(
+            parse_request(get("a,b", "batch=1&input=%5B1%2C2%5D"), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn query_post_method_override_is_supported() {
+        let mut router = Router::new();
+        router.register("query", 1, ProcedureKind::Query);
+        assert_eq!(router.route("query", HttpMethod::Post).unwrap().id, 1);
     }
 
     #[test]
@@ -616,13 +755,7 @@ mod tests {
         router.register("post.list", 7, ProcedureKind::Query);
         router.register("post.create", 8, ProcedureKind::Mutation);
         assert_eq!(router.lookup("post.list").unwrap().id, 7);
-        assert_eq!(
-            router
-                .route("post.list", HttpMethod::Post)
-                .unwrap_err()
-                .code_name,
-            "METHOD_NOT_SUPPORTED"
-        );
+        assert_eq!(router.route("post.list", HttpMethod::Post).unwrap().id, 7);
         assert_eq!(
             router
                 .route("post.create", HttpMethod::Get)

@@ -1,10 +1,12 @@
 //! Internal JSON boundary for the core, isolated per ADR 0002.
 //!
-//! `serde_json` currently owns parsing/serialization and `Value`. Request parsing
-//! necessarily allocates owned procedure paths and JSON values; router lookup
-//! itself borrows the caller's path and allocates nothing. Payload bytes are
-//! bounded before parsing, and parsed JSON depth is checked with an iterative
-//! walk to avoid recursive validation stack growth.
+//! `serde_json` currently owns parsing/serialization and `Value`. The public
+//! `Value` alias exposes `serde_json` types to downstream consumers, so ADR 0002's
+//! one-file swap applies only internally, not as a downstream API guarantee.
+//! Request parsing necessarily allocates owned procedure paths and JSON values;
+//! router lookup itself borrows the caller's path and allocates nothing. Payload
+//! bytes are bounded before parsing, and parsed JSON depth is checked with an
+//! iterative walk to avoid recursive validation stack growth.
 
 use crate::error::TrpcError;
 use serde::Serialize;
@@ -18,6 +20,12 @@ pub(crate) use serde_json::json;
 /// Parse a JSON document while keeping the JSON implementation behind this module.
 pub(crate) fn parse(input: &[u8]) -> Result<Value, serde_json::Error> {
     serde_json::from_slice(input)
+}
+
+/// Detect `serde_json`'s parser recursion guard, whose error kind is exposed only as syntax.
+pub(crate) fn is_recursion_limit_error(error: &serde_json::Error) -> bool {
+    // serde_json currently reports this guard with a stable diagnostic string.
+    error.to_string().starts_with("recursion limit exceeded")
 }
 
 /// Serialize a value as compact JSON.
