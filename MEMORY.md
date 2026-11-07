@@ -34,13 +34,9 @@
 
 ## What is in progress
 
-- Milestone 0.2.0 (Core on FastAPI), task A complete and committed: tRPC v11
-  request parsing (single+batched GET/POST), result/error envelopes, HTTP
-  status selection, `Limits` (1 MiB body / 100 batch / depth 32 enforced
-  before unbounded work), allocation-free `Router` with merge/nest, JSON
-  isolated in `json.rs` (ADR 0002). 32 tests incl. proptests. Two review
-  rounds (GLM 5.3 Flash) — round 1 APPROVE with 9 findings, all fixed;
-  round 2 APPROVE, no regressions.
+- Milestone 0.2.0 task A done (commits 29eccc5, 9ff0cac): tRPC v11 parsing,
+  envelopes, limits, allocation-free Router in Rust; two GLM 5.3 Flash review
+  rounds, all findings fixed and verified.
 - Wire-format facts verified against installed @trpc/client v11 source:
   default transformer is identity (raw input JSON, no `{"json":...}` wrap);
   batched GET input is a single `input` param `{"0":..,"1":..}`; POST batched
@@ -50,10 +46,17 @@
 - RESOLVED DECISION: the official client supports `methodOverride: "POST"`
   sending QUERIES via POST. Policy now: queries accepted over GET and POST;
   mutations only over POST (METHOD_NOT_SUPPORTED over GET).
-- Next: task B — Python `Router`/`procedure` API + `TRPCError` (GLM 5.3 Flash
-  implementer), then task C — PyO3 whole-batch boundary, task D — ASGI
-  adapter + limits wiring, task E — `codegen ts`, task F — official-client
-  compat tests + `fastapi-basic` example.
+- Task B done (commit 567a19b): Python Router/procedure API (typed
+  decorators, merge/nest, charset validation) and TRPCError + data-code
+  table; reviewed APPROVE by GPT 6 Luna; follow-ups (self-nest snapshot,
+  data_code_for export) applied by the orchestrator with tests.
+- DESIGN NOTE (record here, ADR pending if it grows): for framework adapters
+  the Python Router dict is the runtime dispatch table; the Rust Router table
+  is used by the standalone server (0.7.0). Rationale: handler lookup is a
+  Python dict hit either way; cross-boundary id indirection adds FFI cost.
+- Next: task C — PyO3 whole-batch boundary (parse_request/build_response
+  across FFI, GIL released around parse/serialize, limits pyclass),
+  implementer GPT 6 Luna.
 
 ## What was in progress (superseded)
 
