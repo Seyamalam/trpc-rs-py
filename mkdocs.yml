@@ -1,0 +1,20 @@
+site_name: trpc-rs-py
+site_description: tRPC for Python backends, powered by a Rust core
+site_url: https://github.com/Seyamalam/trpc-rs-py
+strict: true
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+
+nav:
+  - Home: index.md
+  - Feature Matrix: feature-matrix.md
+  - Production Readiness: production-readiness.md
+  - Decision Records:
+      - 0001 Python version support: decisions/0001-python-version-support.md
+      - 0002 JSON library: decisions/0002-json-library.md
+      - 0003 Schema libraries: decisions/0003-schema-libraries.md
+      - 0004 Standalone server framework: decisions/0004-standalone-server-framework.md
