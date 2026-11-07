@@ -1,0 +1,18 @@
+{
+  "name": "trpc-rs-py-ts-tests",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Official @trpc/client compatibility and type tests against trpc-rs-py adapters",
+  "packageManager": "pnpm@10.20.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "echo 'Placeholder until 0.2.0 wires a real Python router (see MEMORY.md)' && exit 0"
+  },
+  "devDependencies": {
+    "@trpc/client": "^11.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0"
+  }
+}

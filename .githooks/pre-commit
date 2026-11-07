@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs the fast gate before every commit (MISSION.md section 15).
+exec just ci-fast

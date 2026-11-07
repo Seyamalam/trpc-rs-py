@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs the full gate before every push (MISSION.md section 15).
+exec just ci

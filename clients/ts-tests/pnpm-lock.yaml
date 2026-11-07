@@ -1,0 +1,82 @@
+lockfileVersion: "9.0"
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+  .:
+    devDependencies:
+      "@trpc/client":
+        specifier: ^11.0.0
+        version: 11.25.0(@trpc/server@11.25.0(typescript@5.9.3))(typescript@5.9.3)
+      prettier:
+        specifier: ^3.3.0
+        version: 3.9.10
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+packages:
+  "@trpc/client@11.25.0":
+    resolution:
+      {
+        integrity: sha512-sDLNepXpsR+b1KnnZ/9J3wIMaRaqE//PGzAAaUVM2Mpv9/POU4NCI5WDyu1LSBhLNuDycTHgGEE3tfClPEsiBA==,
+      }
+    peerDependencies:
+      "@trpc/server": 11.25.0
+      typescript: ">=5.7.2"
+
+  "@trpc/server@11.25.0":
+    resolution:
+      {
+        integrity: sha512-WnUlGgLdaRoOKbLKn/t3+6cnjPJndNKvJZYJ7RXSZwFOa1dam6Z8atf551KE0vz2vhyxRtcnk+58P7M/ztAjNw==,
+      }
+    peerDependencies:
+      "@types/aws-lambda": "*"
+      "@types/express": "*"
+      "@types/ws": "*"
+      fastify: "*"
+      next: "*"
+      typescript: ">=5.7.2"
+    peerDependenciesMeta:
+      "@types/aws-lambda":
+        optional: true
+      "@types/express":
+        optional: true
+      "@types/ws":
+        optional: true
+      fastify:
+        optional: true
+      next:
+        optional: true
+
+  prettier@3.9.10:
+    resolution:
+      {
+        integrity: sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA==,
+      }
+    engines: { node: ">=14" }
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution:
+      {
+        integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==,
+      }
+    engines: { node: ">=14.17" }
+    hasBin: true
+
+snapshots:
+  "@trpc/client@11.25.0(@trpc/server@11.25.0(typescript@5.9.3))(typescript@5.9.3)":
+    dependencies:
+      "@trpc/server": 11.25.0(typescript@5.9.3)
+      typescript: 5.9.3
+
+  "@trpc/server@11.25.0(typescript@5.9.3)":
+    dependencies:
+      typescript: 5.9.3
+
+  prettier@3.9.10: {}
+
+  typescript@5.9.3: {}
