@@ -5,7 +5,7 @@ Python, call them from TypeScript with full end-to-end types.
 
 Example:
     ```python
-    from trpc_rs_py import Router, procedure
+    from trpc_rs_py import Router
 
     router = Router()
 
@@ -22,9 +22,20 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _package_version
 
+from .errors import TRPCError, TRPCErrorCode, data_code_for
+from .router import Procedure, ProcedureKind, Router
+
 try:
     __version__ = _package_version("trpc-rs-py")
 except PackageNotFoundError:  # running from a source checkout without install metadata
     __version__ = "0.0.0.dev0"
 
-__all__ = ["__version__"]
+__all__ = [
+    "Procedure",
+    "ProcedureKind",
+    "Router",
+    "TRPCError",
+    "TRPCErrorCode",
+    "__version__",
+    "data_code_for",
+]
