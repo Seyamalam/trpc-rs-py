@@ -63,11 +63,21 @@
   the Python Router dict is the runtime dispatch table; the Rust Router table
   is used by the standalone server (0.7.0). Rationale: handler lookup is a
   Python dict hit either way; cross-boundary id indirection adds FFI cost.
-- Next: task D — ASGI adapter (FastAPI + Starlette) wiring requests through
-  the `_core` boundary (parse -> route -> handler -> build_response), limits
-  wired from config, error mapping to HTTP responses. Implementer GLM 5.3
-  Flash. Then task E — `codegen ts`, task F — official-client compat tests
-  + `fastapi-basic` example, then version bump to 0.2.0 + benchmarks.
+- Task D done (this commit): pure-ASGI adapter — `mount()` sub-app and
+  `attach()` middleware helpers, both Starlette scope conventions; body-size
+  limit enforced before reading; application/json enforced on POST (missing
+  header rejected); mid-body disconnect aborts without dispatching; websocket
+  closed with 1008; production error policy: TRPCError messages pass through
+  except INTERNAL_SERVER_ERROR (fixed "Internal server error"); non-TRPCError
+  exceptions always redacted in production; signature-bind pre-check
+  separates argument errors (400) from handler bugs (500); sync handlers via
+  asyncio.to_thread. 101 Python tests. Two GPT 6 Luna review rounds; round 1
+  REQUEST_CHANGES (blocker + 4 majors) all fixed; round 2 APPROVE.
+- Next: task E — Pydantic input/output validation wiring (TypeAdapters from
+  procedure annotations, input failure -> BAD_REQUEST, output failure ->
+  INTERNAL_SERVER_ERROR), implementer GPT 6 Luna. Then task F — codegen ts,
+  task G — official-client compat tests + fastapi-basic example, then 0.2.0
+  bump + first benchmark run.
 
 ## What was in progress (superseded)
 

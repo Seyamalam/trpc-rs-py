@@ -9,17 +9,17 @@ standalone server, official `@trpc/server`, FastAPI + OpenAPI codegen.
 
 | Feature | FastAPI | Starlette | Flask | Django sync | Django async | Standalone | @trpc/server | FastAPI + OpenAPI codegen |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Queries | planned | planned | planned | planned | planned | planned | supported | supported |
-| Mutations | planned | planned | planned | planned | planned | planned | supported | supported |
-| Batching | planned | planned | planned | planned | planned | planned | supported | not supported |
+| Queries | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | planned | planned | planned | planned | supported | supported |
+| Mutations | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | planned | planned | planned | planned | supported | supported |
+| Batching | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | planned | planned | planned | planned | supported | not supported |
 | Subscriptions (SSE) | planned | planned | planned | planned | planned | planned | supported | not supported |
 | AI streaming helpers | planned | planned | planned | planned | planned | planned | not supported | not supported |
 | Stream cancellation | planned | planned | planned | planned | planned | planned | supported | not supported |
 | Middleware | planned | planned | planned | planned | planned | planned | supported | supported |
 | Context | planned | planned | planned | planned | planned | planned | supported | partial |
-| Error codes | planned | planned | planned | planned | planned | planned | supported | partial |
+| Error codes | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) | planned | planned | planned | planned | supported | partial |
 | Typed errors | planned | planned | planned | planned | planned | planned | not supported | not supported |
-| Input validation | planned | planned | planned | planned | planned | planned | supported | supported |
+| Input validation | [partial](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) (signature binding; Pydantic wiring in progress) | [partial](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_asgi.py) (signature binding) | planned | planned | planned | planned | supported | supported |
 | Output validation | planned | planned | planned | planned | planned | planned | supported | supported |
 | Transformers (superjson) | planned | planned | planned | planned | planned | planned | supported | not supported |
 | File uploads | planned | planned | planned | planned | planned | planned | partial | supported |
