@@ -1,15 +1,14 @@
 //! `PyO3` bindings for [`trpc_core`], exposed as the Python module
 //! `trpc_rs_py._core`.
 //!
-//! This crate is deliberately thin (MISSION.md section 2):
-//!
-//! * Never cross the Python–Rust boundary per field or per item in a loop.
-//!   Whole requests and whole batches pass in one call.
-//! * Release the GIL with `Python::detach` during parsing, serialization
-//!   and I/O (added as those paths land in later milestones).
+//! Whole requests and response batches cross the Python boundary in one call.
+//! JSON parsing and serialization run with the GIL released; conversion between
+//! Python objects and JSON values happens at the boundary. Input integer
+//! literals larger than `u64::MAX` are currently parsed as floats by
+//! `serde_json`; output conversion rejects Python integers outside `i64`/`u64`.
 //!
 //! All FFI `unsafe` needed by `PyO3` macros is isolated in the `ffi` module
-//! and listed in `docs/architecture.md`.
+//! and are listed in `docs/architecture.md`.
 
 #![deny(unsafe_code)]
 
@@ -20,7 +19,359 @@
 mod ffi {
     #![allow(unsafe_code)]
 
-    use pyo3::prelude::*;
+    use pyo3::{
+        create_exception,
+        exceptions::{PyException, PyTypeError, PyValueError},
+        prelude::*,
+        types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString},
+    };
+    use trpc_core::{
+        error::{ErrorCode, TrpcError},
+        protocol::{self, HttpMethod, Request},
+    };
+
+    create_exception!(trpc_rs_py._core, TrpcProtocolError, PyException);
+
+    /// Configurable request limits.
+    #[pyclass(
+        module = "trpc_rs_py._core",
+        name = "Limits",
+        frozen,
+        skip_from_py_object
+    )]
+    #[derive(Clone, Copy)]
+    pub struct PyLimits {
+        body_size: usize,
+        batch_size: usize,
+        json_depth: usize,
+    }
+
+    #[pymethods]
+    impl PyLimits {
+        /// Create request limits, defaulting each omitted setting independently.
+        #[new]
+        #[pyo3(signature = (*, max_body_size=None, max_batch_size=None, max_json_depth=None))]
+        fn new(
+            max_body_size: Option<usize>,
+            max_batch_size: Option<usize>,
+            max_json_depth: Option<usize>,
+        ) -> Self {
+            let defaults = protocol::Limits::default();
+            Self {
+                body_size: max_body_size.unwrap_or(defaults.max_body_size),
+                batch_size: max_batch_size.unwrap_or(defaults.max_batch_size),
+                json_depth: max_json_depth.unwrap_or(defaults.max_json_depth),
+            }
+        }
+
+        /// Maximum request body or encoded input size in bytes.
+        #[getter]
+        fn max_body_size(&self) -> usize {
+            self.body_size
+        }
+        /// Maximum number of calls in one batch.
+        #[getter]
+        fn max_batch_size(&self) -> usize {
+            self.batch_size
+        }
+        /// Maximum nested JSON containers.
+        #[getter]
+        fn max_json_depth(&self) -> usize {
+            self.json_depth
+        }
+    }
+
+    impl From<PyLimits> for protocol::Limits {
+        fn from(value: PyLimits) -> Self {
+            Self {
+                max_body_size: value.body_size,
+                max_batch_size: value.batch_size,
+                max_json_depth: value.json_depth,
+            }
+        }
+    }
+
+    /// One parsed procedure call and its decoded JSON input.
+    #[pyclass(module = "trpc_rs_py._core", name = "ParsedCall", frozen)]
+    pub struct PyParsedCall {
+        path: String,
+        input: Py<PyAny>,
+    }
+
+    #[pymethods]
+    impl PyParsedCall {
+        /// Procedure path.
+        #[getter]
+        fn path(&self) -> &str {
+            &self.path
+        }
+        /// Decoded JSON input, or `None` when the wire input was absent/null.
+        #[getter]
+        fn input(&self, py: Python<'_>) -> Py<PyAny> {
+            self.input.clone_ref(py)
+        }
+    }
+
+    /// Parsed request containing the whole call batch.
+    #[pyclass(module = "trpc_rs_py._core", name = "ParsedRequest", frozen)]
+    pub struct PyParsedRequest {
+        calls: Vec<Py<PyParsedCall>>,
+        batched: bool,
+    }
+
+    #[pymethods]
+    impl PyParsedRequest {
+        /// Calls in request order.
+        #[getter]
+        fn calls(&self, py: Python<'_>) -> Vec<Py<PyParsedCall>> {
+            self.calls.iter().map(|call| call.clone_ref(py)).collect()
+        }
+        /// Whether the request used tRPC batching.
+        #[getter]
+        fn batched(&self) -> bool {
+            self.batched
+        }
+    }
+
+    /// A success or tRPC error to include in one serialized response batch.
+    ///
+    /// Successful data must be JSON-ready: `None`, booleans, integers, floats,
+    /// strings, lists, and dictionaries with string keys (recursively).
+    #[pyclass(module = "trpc_rs_py._core", name = "CallResult", frozen)]
+    pub struct PyCallResult {
+        result: Result<serde_json::Value, TrpcError>,
+    }
+
+    #[pymethods]
+    impl PyCallResult {
+        /// Create a successful call result from a JSON-ready Python value.
+        #[staticmethod]
+        fn ok(data: &Bound<'_, PyAny>) -> PyResult<Self> {
+            Ok(Self {
+                result: Ok(python_to_json_value(data, 0)?),
+            })
+        }
+
+        /// Create an error result using a validated official tRPC error code.
+        #[staticmethod]
+        fn error(
+            message: String,
+            code: &str,
+            data_code: i32,
+            http_status: u16,
+            code_name: &str,
+        ) -> PyResult<Self> {
+            let parsed = ErrorCode::from_name(code_name).ok_or_else(|| {
+                PyValueError::new_err(format!("unsupported tRPC error code: {code_name}"))
+            })?;
+            if code != code_name
+                || data_code != parsed.code()
+                || http_status != parsed.http_status()
+            {
+                return Err(PyValueError::new_err(format!(
+                    "error fields do not match {code_name}: expected code={code_name}, data_code={}, http_status={}",
+                    parsed.code(),
+                    parsed.http_status()
+                )));
+            }
+            Ok(Self {
+                result: Err(TrpcError::new(parsed, message)),
+            })
+        }
+    }
+
+    fn protocol_exception(py: Python<'_>, error: TrpcError) -> PyResult<PyErr> {
+        let exception = TrpcProtocolError::new_err(error.message.clone());
+        let value = exception.value(py);
+        // Contract attributes are instance-level; the .pyi declares their types at class level.
+        value.setattr("message", error.message)?;
+        value.setattr("code", error.code_name)?;
+        value.setattr("data_code", error.data_code)?;
+        value.setattr("http_status", error.http_status)?;
+        Ok(exception)
+    }
+
+    /// Parse an entire tRPC HTTP request and batch in one FFI call.
+    ///
+    /// The method must be GET or POST (case-insensitive). `body=None` is
+    /// equivalent to an empty body. Protocol failures raise `TrpcProtocolError`.
+    #[pyfunction]
+    #[pyo3(signature = (method, path, query, body, limits))]
+    fn parse_request(
+        py: Python<'_>,
+        method: &str,
+        path: &str,
+        query: &str,
+        body: Option<&Bound<'_, PyBytes>>,
+        limits: &Bound<'_, PyLimits>,
+    ) -> PyResult<Py<PyParsedRequest>> {
+        let http_method = if method.eq_ignore_ascii_case("GET") {
+            HttpMethod::Get
+        } else if method.eq_ignore_ascii_case("POST") {
+            HttpMethod::Post
+        } else {
+            return Err(PyValueError::new_err(format!(
+                "unsupported HTTP method: {method}"
+            )));
+        };
+        let body = body.map_or_else(Vec::new, |bytes| bytes.as_bytes().to_vec());
+        let path = path.to_owned();
+        let query = query.to_owned();
+        let limits: protocol::Limits = (*limits.borrow()).into();
+        let parsed = py.detach(move || {
+            protocol::parse_request(
+                Request {
+                    method: http_method,
+                    path: &path,
+                    query: &query,
+                    body: &body,
+                    content_length: Some(body.len()),
+                },
+                limits,
+            )
+        });
+        let parsed = match parsed {
+            Ok(parsed) => parsed,
+            Err(error) => return Err(protocol_exception(py, error)?),
+        };
+        let mut calls = Vec::with_capacity(parsed.calls.len());
+        for call in parsed.calls {
+            // The core enforces the configured depth limit and serde_json's parser
+            // recursion guard (128): this conversion therefore has a hard depth bound.
+            let input = json_to_python(py, call.input, 0)?;
+            calls.push(Py::new(
+                py,
+                PyParsedCall {
+                    path: call.path,
+                    input,
+                },
+            )?);
+        }
+        Py::new(
+            py,
+            PyParsedRequest {
+                calls,
+                batched: parsed.batched,
+            },
+        )
+    }
+
+    /// Convert one whole batch of handler results to a tRPC response envelope.
+    #[pyfunction]
+    fn build_response(
+        py: Python<'_>,
+        results: Vec<Py<PyCallResult>>,
+        batched: bool,
+    ) -> (u16, String) {
+        let results = results
+            .into_iter()
+            .map(|item| item.borrow(py).result.clone())
+            .collect();
+        let response = py.detach(move || protocol::build_response(results, batched));
+        (response.http_status, response.body)
+    }
+
+    // serde_json parsing guarantees <= 128 levels; iterative JSON-to-Python
+    // conversion is not needed to protect the native stack at this bounded depth.
+    fn json_to_python(
+        py: Python<'_>,
+        value: serde_json::Value,
+        depth: usize,
+    ) -> PyResult<Py<PyAny>> {
+        if depth > 128 {
+            return Err(PyValueError::new_err(
+                "JSON nesting depth exceeded conversion limit",
+            ));
+        }
+        match value {
+            serde_json::Value::Null => Ok(py.None()),
+            serde_json::Value::Bool(value) => {
+                Ok(value.into_pyobject(py)?.to_owned().into_any().unbind())
+            }
+            serde_json::Value::Number(value) => {
+                if let Some(number) = value.as_i64() {
+                    Ok(number.into_pyobject(py)?.into_any().unbind())
+                } else if let Some(number) = value.as_u64() {
+                    Ok(number.into_pyobject(py)?.into_any().unbind())
+                } else {
+                    let number = value
+                        .as_f64()
+                        .ok_or_else(|| PyValueError::new_err("invalid JSON number"))?;
+                    Ok(number.into_pyobject(py)?.into_any().unbind())
+                }
+            }
+            serde_json::Value::String(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+            serde_json::Value::Array(values) => {
+                let converted = values
+                    .into_iter()
+                    .map(|item| json_to_python(py, item, depth + 1))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok(PyList::new(py, converted)?.into_any().unbind())
+            }
+            serde_json::Value::Object(values) => {
+                let dict = PyDict::new(py);
+                for (key, item) in values {
+                    dict.set_item(key, json_to_python(py, item, depth + 1)?)?;
+                }
+                Ok(dict.into_any().unbind())
+            }
+        }
+    }
+
+    fn python_to_json_value(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json::Value> {
+        if depth > 128 {
+            return Err(PyValueError::new_err(
+                "JSON nesting exceeds conversion limit of 128",
+            ));
+        }
+        if value.is_none() {
+            return Ok(serde_json::Value::Null);
+        }
+        if value.is_instance_of::<PyBool>() {
+            return Ok(serde_json::Value::Bool(value.extract()?));
+        }
+        if value.is_instance_of::<PyInt>() {
+            if let Ok(number) = value.extract::<i64>() {
+                return Ok(number.into());
+            }
+            if let Ok(number) = value.extract::<u64>() {
+                return Ok(number.into());
+            }
+            return Err(PyValueError::new_err(
+                "Python integer is outside the JSON integer range",
+            ));
+        }
+        if value.is_instance_of::<PyFloat>() {
+            let number = value.extract::<f64>()?;
+            return serde_json::Number::from_f64(number)
+                .map(serde_json::Value::Number)
+                .ok_or_else(|| PyValueError::new_err("JSON does not support NaN or infinity"));
+        }
+        if value.is_instance_of::<PyString>() {
+            return Ok(value.extract::<String>()?.into());
+        }
+        if let Ok(list) = value.cast::<PyList>() {
+            return list
+                .iter()
+                .map(|item| python_to_json_value(&item, depth + 1))
+                .collect::<PyResult<Vec<_>>>()
+                .map(serde_json::Value::Array);
+        }
+        if let Ok(dict) = value.cast::<PyDict>() {
+            let mut object = serde_json::Map::new();
+            for (key, item) in dict.iter() {
+                let key = key
+                    .extract::<String>()
+                    .map_err(|_| PyTypeError::new_err("JSON object keys must be strings"))?;
+                object.insert(key, python_to_json_value(&item, depth + 1)?);
+            }
+            return Ok(serde_json::Value::Object(object));
+        }
+        Err(PyTypeError::new_err(format!(
+            "unsupported JSON value type: {}",
+            value.get_type().name()?
+        )))
+    }
 
     /// Python-visible extension module `trpc_rs_py._core`.
     ///
@@ -32,16 +383,206 @@ mod ffi {
     #[pymodule]
     pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add("__version__", trpc_core::VERSION)?;
+        m.add("TrpcProtocolError", m.py().get_type::<TrpcProtocolError>())?;
+        m.add_class::<PyLimits>()?;
+        m.add_class::<PyParsedCall>()?;
+        m.add_class::<PyParsedRequest>()?;
+        m.add_class::<PyCallResult>()?;
+        m.add_function(wrap_pyfunction!(parse_request, m)?)?;
+        m.add_function(wrap_pyfunction!(build_response, m)?)?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use pyo3::exceptions::PyTypeError;
+
+        #[test]
+        fn json_to_python_and_python_to_json_round_trip_values() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let source = serde_json::json!({
+                    "signed": -42,
+                    "unsigned": u64::MAX,
+                    "items": [null, true, false, 1.25, "text"]
+                });
+                let python = json_to_python(py, source.clone(), 0).unwrap();
+                let round_trip = python_to_json_value(python.bind(py), 0).unwrap();
+                assert_eq!(round_trip, source);
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn python_to_json_rejects_non_finite_floats() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                for number in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                    let value = number.into_pyobject(py).unwrap().into_any();
+                    let error = python_to_json_value(&value, 0).unwrap_err();
+                    assert!(error.to_string().contains("NaN or infinity"));
+                }
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn python_to_json_rejects_non_string_dictionary_keys() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let dict = PyDict::new(py);
+                dict.set_item(1, "value").unwrap();
+                let error = python_to_json_value(&dict.into_any(), 0).unwrap_err();
+                assert!(error.is_instance_of::<PyTypeError>(py));
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn conversions_reject_depth_129() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let mut json = serde_json::Value::Null;
+                for _ in 0..129 {
+                    json = serde_json::Value::Array(vec![json]);
+                }
+                assert!(json_to_python(py, json, 0).is_err());
+
+                let mut value = PyList::empty(py).into_any();
+                for _ in 0..129 {
+                    let list = PyList::empty(py);
+                    list.append(value).unwrap();
+                    value = list.into_any();
+                }
+                assert!(python_to_json_value(&value, 0).is_err());
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn call_result_error_accepts_all_official_names() {
+            let codes = [
+                ErrorCode::ParseError,
+                ErrorCode::BadRequest,
+                ErrorCode::InternalServerError,
+                ErrorCode::NotFound,
+                ErrorCode::Unauthorized,
+                ErrorCode::Forbidden,
+                ErrorCode::MethodNotSupported,
+                ErrorCode::Timeout,
+                ErrorCode::Conflict,
+                ErrorCode::PayloadTooLarge,
+                ErrorCode::PreconditionFailed,
+                ErrorCode::ClientClosedRequest,
+            ];
+            for code in codes {
+                assert!(
+                    PyCallResult::error(
+                        "failure".to_owned(),
+                        code.name(),
+                        code.code(),
+                        code.http_status(),
+                        code.name(),
+                    )
+                    .is_ok()
+                );
+            }
+        }
+
+        #[test]
+        fn call_result_error_rejects_each_mismatch_and_unknown_name() {
+            let valid = ErrorCode::NotFound;
+            assert!(
+                PyCallResult::error(
+                    "failure".to_owned(),
+                    "BAD_REQUEST",
+                    valid.code(),
+                    valid.http_status(),
+                    valid.name()
+                )
+                .is_err()
+            );
+            assert!(
+                PyCallResult::error(
+                    "failure".to_owned(),
+                    valid.name(),
+                    valid.code() + 1,
+                    valid.http_status(),
+                    valid.name()
+                )
+                .is_err()
+            );
+            assert!(
+                PyCallResult::error(
+                    "failure".to_owned(),
+                    valid.name(),
+                    valid.code(),
+                    valid.http_status() + 1,
+                    valid.name()
+                )
+                .is_err()
+            );
+            assert!(PyCallResult::error("failure".to_owned(), "UNKNOWN", 0, 0, "UNKNOWN").is_err());
+        }
+
+        #[test]
+        fn protocol_exception_exposes_contract_attributes() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let error = TrpcError::new(ErrorCode::NotFound, "missing");
+                let exception = protocol_exception(py, error).unwrap();
+                let value = exception.value(py);
+                assert_eq!(
+                    value
+                        .getattr("message")
+                        .unwrap()
+                        .extract::<String>()
+                        .unwrap(),
+                    "missing"
+                );
+                assert_eq!(
+                    value.getattr("code").unwrap().extract::<String>().unwrap(),
+                    "NOT_FOUND"
+                );
+                assert_eq!(
+                    value
+                        .getattr("data_code")
+                        .unwrap()
+                        .extract::<i32>()
+                        .unwrap(),
+                    -32004
+                );
+                assert_eq!(
+                    value
+                        .getattr("http_status")
+                        .unwrap()
+                        .extract::<u16>()
+                        .unwrap(),
+                    404
+                );
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn py_limits_convert_to_protocol_limits() {
+            let py_limits = PyLimits {
+                body_size: 123,
+                batch_size: 7,
+                json_depth: 9,
+            };
+            let limits: protocol::Limits = py_limits.into();
+            assert_eq!(limits.max_body_size, 123);
+            assert_eq!(limits.max_batch_size, 7);
+            assert_eq!(limits.max_json_depth, 9);
+        }
+
+        #[test]
+        fn core_version_is_visible() {
+            assert!(!trpc_core::VERSION.is_empty());
+        }
     }
 }
 
 pub use ffi::_core;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn core_version_is_visible() {
-        assert!(!trpc_core::VERSION.is_empty());
-    }
-}

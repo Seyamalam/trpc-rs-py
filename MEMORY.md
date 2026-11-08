@@ -50,13 +50,24 @@
   decorators, merge/nest, charset validation) and TRPCError + data-code
   table; reviewed APPROVE by GPT 6 Luna; follow-ups (self-nest snapshot,
   data_code_for export) applied by the orchestrator with tests.
+- Task C done (this commit): PyO3 whole-batch FFI boundary — `Limits`,
+  `parse_request`, `ParsedCall`/`ParsedRequest`, `CallResult.ok/error`,
+  `build_response`, `TrpcProtocolError` (.message/.code/.data_code/
+  .http_status); GIL released around parse and serialize; `ErrorCode::
+  from_name` added to core (single source of truth for code names);
+  documented big-int input degradation. 41 Rust + 72 Python tests. Two GLM
+  5.3 Flash review rounds: round 1 REQUEST_CHANGES (9 findings) — all
+  fixed; round 2 REQUEST_CHANGES on two mechanical ruff failures only,
+  applied by the orchestrator; reviewer pre-approved the outcome.
 - DESIGN NOTE (record here, ADR pending if it grows): for framework adapters
   the Python Router dict is the runtime dispatch table; the Rust Router table
   is used by the standalone server (0.7.0). Rationale: handler lookup is a
   Python dict hit either way; cross-boundary id indirection adds FFI cost.
-- Next: task C — PyO3 whole-batch boundary (parse_request/build_response
-  across FFI, GIL released around parse/serialize, limits pyclass),
-  implementer GPT 6 Luna.
+- Next: task D — ASGI adapter (FastAPI + Starlette) wiring requests through
+  the `_core` boundary (parse -> route -> handler -> build_response), limits
+  wired from config, error mapping to HTTP responses. Implementer GLM 5.3
+  Flash. Then task E — `codegen ts`, task F — official-client compat tests
+  + `fastapi-basic` example, then version bump to 0.2.0 + benchmarks.
 
 ## What was in progress (superseded)
 
@@ -87,6 +98,14 @@
 - Pydantic as hard dependency vs optional extra (ADR 0003 keeps it core for now).
 - superjson/transformer support order (not scheduled before 0.3.0).
 - OpenAPI-in-FastAPI-app integration decision (needed for 0.3.0; ADR planned).
+- serde_json silently degrades input integer literals beyond the u64 range to
+  floats (documented on `ParsedCall.input`); follow up with
+  `arbitrary_precision` or core-level rejection before 1.0 (filed from task C
+  review round 1).
+- Hot-path allocations noted for the benchmark pass (0.2.0/0.7.0):\  body
+  `to_vec()` copy in `parse_request` and batch `Value` deep-clone in
+  `build_response` under the GIL (unavoidable with frozen pyclasses until
+  profiled).
 
 ## Known issues and gotchas
 

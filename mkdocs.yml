@@ -11,6 +11,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - Feature Matrix: feature-matrix.md
   - Production Readiness: production-readiness.md
   - Decision Records:

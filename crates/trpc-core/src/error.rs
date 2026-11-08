@@ -38,6 +38,26 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+    /// Parse an official tRPC error code name.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "PARSE_ERROR" => Self::ParseError,
+            "BAD_REQUEST" => Self::BadRequest,
+            "INTERNAL_SERVER_ERROR" => Self::InternalServerError,
+            "NOT_FOUND" => Self::NotFound,
+            "UNAUTHORIZED" => Self::Unauthorized,
+            "FORBIDDEN" => Self::Forbidden,
+            "METHOD_NOT_SUPPORTED" => Self::MethodNotSupported,
+            "TIMEOUT" => Self::Timeout,
+            "CONFLICT" => Self::Conflict,
+            "PAYLOAD_TOO_LARGE" => Self::PayloadTooLarge,
+            "PRECONDITION_FAILED" => Self::PreconditionFailed,
+            "CLIENT_CLOSED_REQUEST" => Self::ClientClosedRequest,
+            _ => return None,
+        })
+    }
+
     /// The tRPC data code sent on the wire.
     #[must_use]
     pub const fn code(self) -> i32 {
@@ -148,6 +168,28 @@ mod tests {
         assert_eq!(ErrorCode::NotFound.code(), -32004);
         assert_eq!(ErrorCode::NotFound.http_status(), 404);
         assert_eq!(ErrorCode::Unauthorized.name(), "UNAUTHORIZED");
+    }
+
+    #[test]
+    fn from_name_accepts_all_official_names() {
+        let codes = [
+            ErrorCode::ParseError,
+            ErrorCode::BadRequest,
+            ErrorCode::InternalServerError,
+            ErrorCode::NotFound,
+            ErrorCode::Unauthorized,
+            ErrorCode::Forbidden,
+            ErrorCode::MethodNotSupported,
+            ErrorCode::Timeout,
+            ErrorCode::Conflict,
+            ErrorCode::PayloadTooLarge,
+            ErrorCode::PreconditionFailed,
+            ErrorCode::ClientClosedRequest,
+        ];
+        for code in codes {
+            assert_eq!(ErrorCode::from_name(code.name()), Some(code));
+        }
+        assert_eq!(ErrorCode::from_name("NOT_AN_ERROR"), None);
     }
 
     #[test]
