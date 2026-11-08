@@ -9,12 +9,15 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from pydantic import BaseModel, field_serializer
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from trpc_rs_py import Limits, Router, attach, mount
+from trpc_rs_py._core import build_response
+from trpc_rs_py.asgi import _run_call
 from trpc_rs_py.errors import TRPCError, TRPCErrorCode
 
 
@@ -100,6 +103,233 @@ def test_fastapi_batched_get_in_order(dev_client: TestClient) -> None:
     ]
 
 
+def test_pydantic_input_and_output_validation_integration() -> None:
+    class UserInput(BaseModel):
+        name: str
+        age: int
+
+    class UserOutput(BaseModel):
+        greeting: str
+
+    router = Router()
+
+    @router.query
+    def greet(user: UserInput) -> UserOutput:
+        return UserOutput(greeting=f"Hello {user.name}, {user.age}")
+
+    app = FastAPI()
+    app.mount("/trpc", mount(router, production=True))
+    client = TestClient(app)
+
+    valid = client.get(
+        "/trpc/greet", params={"input": query_input(user={"name": "Ada", "age": "37"})}
+    )
+    assert valid.status_code == 200
+    assert valid.json() == {"result": {"data": {"greeting": "Hello Ada, 37"}}}
+
+    missing = client.get("/trpc/greet", params={"input": query_input(user={"name": "Ada"})})
+    assert missing.status_code == 400
+    assert missing.json()["error"]["json"]["message"] == "Invalid input: user: Field required"
+
+    extra = client.get(
+        "/trpc/greet",
+        params={"input": query_input(user={"name": "Ada", "age": 37}, extra=1)},
+    )
+    assert extra.status_code == 400
+    assert extra.json()["error"]["json"]["message"] == (
+        "Invalid input: input: Extra inputs are not permitted"
+    )
+
+    wrong = client.get("/trpc/greet", params={"input": query_input(user={"name": 1, "age": 37})})
+    assert wrong.status_code == 400
+
+    @router.query
+    def wrong_output() -> UserOutput:
+        return {"not_greeting": "bad"}  # type: ignore[return-value]
+
+    # The adapter intentionally snapshots procedure validators at construction.
+    # Construct a new app to include the newly registered procedure.
+    app = FastAPI()
+    app.mount("/trpc", mount(router, production=True))
+    response = TestClient(app).get("/trpc/wrong_output")
+    assert response.status_code == 500
+    error = response.json()["error"]["json"]
+    assert error["message"] == "Internal server error"
+    assert "not_greeting" not in json.dumps(response.json())
+
+
+def test_serializer_failure_is_normalized_in_development_and_production() -> None:
+    class SerializedOutput(BaseModel):
+        value: str
+
+        @field_serializer("value")
+        def serialize_value(self, value: str) -> str:
+            """Raise a private serializer error for adapter error handling."""
+            raise ValueError("secret serializer token")
+
+    router = Router()
+
+    @router.query
+    def serialized() -> SerializedOutput:
+        return SerializedOutput(value="private")
+
+    dev_app = FastAPI()
+    dev_app.mount("/trpc", mount(router))
+    prod_app = FastAPI()
+    prod_app.mount("/trpc", mount(router, production=True))
+
+    for app, expected_message in (
+        (dev_app, "Invalid output from procedure"),
+        (prod_app, "Internal server error"),
+    ):
+        response = TestClient(app).get("/trpc/serialized")
+        assert response.status_code == 500
+        error = response.json()["error"]["json"]
+        assert error["data"]["code"] == "INTERNAL_SERVER_ERROR"
+        assert error["message"] == expected_message
+        assert "secret serializer token" not in json.dumps(response.json())
+
+
+def test_run_call_normalizes_arbitrary_output_validator_exceptions() -> None:
+    router = Router()
+
+    @router.query
+    def output_failure() -> str:
+        return "ok"
+
+    def validator(value: Any) -> Any:
+        raise RuntimeError("secret custom validator detail")
+
+    procedure = router.procedures["output_failure"]
+    for production, expected_message in (
+        (False, "Invalid output from procedure"),
+        (True, "Internal server error"),
+    ):
+        result = asyncio.run(_run_call(procedure, None, production, (None, validator)))
+        status, body = build_response([result], False)
+        error = json.loads(body)["error"]["json"]
+        assert status == 500
+        assert error["message"] == expected_message
+        assert "secret custom validator detail" not in body
+
+
+def test_batched_validation_returns_ordered_individual_envelopes() -> None:
+    router = Router()
+
+    @router.query
+    def double(value: int) -> int:
+        return value * 2
+
+    app = FastAPI()
+    app.mount("/trpc", mount(router))
+    client = TestClient(app)
+    response = client.get(
+        "/trpc/double,double",
+        params={"batch": "1", "input": json.dumps({"0": {"value": 2}, "1": {"bad": "secret"}})},
+    )
+    assert response.status_code == 400
+    result = response.json()
+    assert result[0] == {"result": {"data": 4}}
+    assert result[1]["error"]["json"]["data"]["code"] == "BAD_REQUEST"
+    assert "secret" not in json.dumps(result)
+
+
+def test_optional_only_typed_procedure_uses_default_for_null_input() -> None:
+    router = Router()
+
+    @router.query
+    def greeting(prefix: str = "hello") -> str:
+        return prefix
+
+    response = TestClient(mount(router)).get("/trpc/greeting", params={"input": "null"})
+    assert response.status_code == 200
+    assert response.json() == {"result": {"data": "hello"}}
+
+
+def test_positional_only_typed_procedure_validates_and_invokes_positionally() -> None:
+    router = Router()
+
+    @router.query
+    def positional(value: int, /) -> int:
+        return value * 2
+
+    client = TestClient(mount(router))
+    valid = client.get("/trpc/positional", params={"input": query_input(value="6")})
+    assert valid.status_code == 200
+    assert valid.json() == {"result": {"data": 12}}
+
+    invalid = client.get("/trpc/positional", params={"input": query_input(value="bad-secret")})
+    assert invalid.status_code == 400
+    error = invalid.json()["error"]["json"]
+    assert error["data"]["code"] == "BAD_REQUEST"
+    assert error["message"] == "Invalid input: value: Invalid integer"
+    assert "bad-secret" not in invalid.text
+
+
+def test_missing_required_unannotated_parameter_is_bad_request() -> None:
+    router = Router()
+
+    def required(value: int, missing) -> int:
+        return value + missing
+
+    router.query(name="required")(required)
+    response = TestClient(mount(router)).get(
+        "/trpc/required", params={"input": query_input(value=1)}
+    )
+    assert response.status_code == 400
+    error = response.json()["error"]["json"]
+    assert error["data"]["code"] == "BAD_REQUEST"
+    assert error["message"] == "Invalid input: missing: Field required"
+
+
+def test_varargs_only_procedure_accepts_scalar_list_and_null() -> None:
+    router = Router()
+
+    @router.query
+    def collect(*values: Any) -> list[Any]:
+        return list(values)
+
+    client = TestClient(mount(router))
+    cases = (
+        (json.dumps(5), [5]),
+        (json.dumps([1, "two"]), [1, "two"]),
+        ("null", []),
+    )
+    for input_value, expected in cases:
+        response = client.get("/trpc/collect", params={"input": input_value})
+        assert response.status_code == 200
+        assert response.json() == {"result": {"data": expected}}
+
+
+def test_mixed_parameter_kinds_invoke_with_validated_args_and_kwargs() -> None:
+    router = Router()
+
+    @router.query
+    def mixed(first: int, /, second: str, *, enabled: bool) -> str:
+        return f"{first}:{second}:{enabled}"
+
+    response = TestClient(mount(router)).get(
+        "/trpc/mixed",
+        params={"input": query_input(first="2", second="ok", enabled=True)},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"result": {"data": "2:ok:True"}}
+
+
+def test_unannotated_procedure_keeps_legacy_invocation() -> None:
+    router = Router()
+
+    def legacy(value):
+        return value
+
+    router.query(name="legacy")(legacy)
+    app = FastAPI()
+    app.mount("/trpc", mount(router))
+    response = TestClient(app).get("/trpc/legacy", params={"input": json.dumps(3)})
+    assert response.status_code == 200
+    assert response.json() == {"result": {"data": 3}}
+
+
 def test_trpc_error_maps_to_status_and_envelope(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/boom")
     assert response.status_code == 404
@@ -131,7 +361,7 @@ def test_wrong_input_shape_is_bad_request(dev_client: TestClient) -> None:
     assert response.status_code == 400
     error = response.json()["error"]["json"]
     assert error["data"]["code"] == "BAD_REQUEST"
-    assert error["message"] == "Invalid input for procedure echo"
+    assert error["message"] == "Invalid input: input: Extra inputs are not permitted"
 
 
 def test_missing_procedure_is_not_found(dev_client: TestClient) -> None:

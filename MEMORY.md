@@ -73,11 +73,21 @@
   separates argument errors (400) from handler bugs (500); sync handlers via
   asyncio.to_thread. 101 Python tests. Two GPT 6 Luna review rounds; round 1
   REQUEST_CHANGES (blocker + 4 majors) all fixed; round 2 APPROVE.
-- Next: task E — Pydantic input/output validation wiring (TypeAdapters from
-  procedure annotations, input failure -> BAD_REQUEST, output failure ->
-  INTERNAL_SERVER_ERROR), implementer GPT 6 Luna. Then task F — codegen ts,
-  task G — official-client compat tests + fastapi-basic example, then 0.2.0
-  bump + first benchmark run.
+- Task E done (this commit): Pydantic v2 input/output validation from handler
+  signatures, built once at adapter construction; value-safe input errors,
+  output serialization failures normalized; Annotated constraints preserved;
+  positional-only, required unannotated, *args/**kwargs invocation supported;
+  validation docs, matrix and architecture updated. 130 Python tests. Review
+  round 1 found and fixed input-value leakage, lost Annotated metadata and
+  output serializer error leaks; round 2 found/fixed Router metadata and
+  signature edge cases; round 3 found/fixed stale docs; final round APPROVE.
+  GLM 5.3 Flash review endpoint repeatedly failed (502); user authorized
+  same-model GPT 6 Luna review. Independence is weaker than the preferred
+  cross-model review; this deviation is recorded transparently.
+- Next: task F — `trpc-py codegen ts` (AppRouter .d.ts), implementer GLM 5.3
+  Flash if available (otherwise GPT 6 Luna per explicit user authorization
+  may be requested); then task G — official `@trpc/client` compatibility
+  tests + fastapi-basic example; then 0.2.0 bump + first benchmark run.
 
 ## What was in progress (superseded)
 
@@ -89,19 +99,18 @@
 1. Finish 0.1.0: benchmark harness skeleton (`benchmarks/README.md`, `plot.py`),
    git hooks installed, docs skeleton, feature matrix skeleton — done as part
    of the foundation commits.
-2. Start **0.2.0 Core on FastAPI** through subagents (GPT 6 Luna implementer /
-   GLM 5.3 Flash reviewer and vice versa):
-   a. Rust: tRPC v11 GET query parsing (batched), POST mutation parsing, result
-      envelope, error envelope, HTTP status mapping (unit + proptest).
-   b. Rust: router table (path lookup, no hot-path allocation).
-   c. Python: `Router`, `procedure` decorators, `TRPCError`, context.
-   d. PyO3: whole-batch request parse + whole-batch response serialize, GIL
-      released around parse/serialize.
-   e. ASGI adapter (FastAPI + Starlette), request limits (body size, batch
-      size, JSON depth).
-   f. `codegen ts` (AppRouter .d.ts) + clients/ts-tests official client compat.
-   g. `fastapi-basic` example + docs/feature-matrix updates.
-3. After 0.2.0: version bump to 0.2.0, CHANGELOG, tag, benchmark run.
+2. **0.2.0 Core on FastAPI progress:** tasks A–E complete (Rust protocol,
+   Python Router/errors, PyO3 batch boundary, ASGI adapter, Pydantic v2
+   validation); all changes committed/pushed after review + gates. Remaining:
+   a. Task F: `trpc-py codegen ts` emitting AppRouter .d.ts from the Python
+      Router, with typing tests.
+   b. Task G: official @trpc/client v11 compatibility tests against FastAPI/
+      Starlette for queries, mutations, batching and errors; add fastapi-basic
+      example with README + smoke test.
+   c. Update feature matrix from test evidence and run first benchmark suite.
+   d. Bump to 0.2.0, update CHANGELOG, annotated tag, push.
+3. Then begin 0.3.0 launch work (live types, AI streaming, OpenAPI/REST,
+   starter); stop at launch and ask user to publish/report feedback.
 
 ## Open questions
 

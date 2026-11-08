@@ -176,7 +176,7 @@ def _type_hints_of(handler: Callable[..., Any]) -> dict[str, Any]:
         ```
     """
     try:
-        return typing.get_type_hints(handler)
+        return typing.get_type_hints(handler, include_extras=True)
     except (NameError, TypeError, ValueError):
         return dict(getattr(handler, "__annotations__", {}))
 

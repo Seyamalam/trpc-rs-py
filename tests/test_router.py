@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, get_args, get_origin
 
 import pytest
+from pydantic import Field
+from pydantic.fields import FieldInfo
 
 from trpc_rs_py import ProcedureKind, Router
 
@@ -69,6 +71,20 @@ def test_annotations_are_captured() -> None:
     procedure = router.procedures["get_user"]
     assert procedure.input_annotation is int
     assert procedure.output_annotation is User
+
+
+def test_annotated_input_metadata_is_captured() -> None:
+    router = Router()
+
+    @router.query
+    def positive(value: Annotated[int, Field(gt=0)]) -> int:
+        return value
+
+    annotation = router.procedures["positive"].input_annotation
+    assert get_origin(annotation) is Annotated
+    metadata = get_args(annotation)[1]
+    assert isinstance(metadata, FieldInfo)
+    assert metadata.metadata[0].gt == 0
 
 
 def test_unannotated_handler_has_none_annotations() -> None:

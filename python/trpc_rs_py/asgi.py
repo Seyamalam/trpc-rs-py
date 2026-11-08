@@ -61,6 +61,12 @@ from typing import Any, TypeAlias
 from ._core import CallResult, Limits, TrpcProtocolError, build_response, parse_request
 from .errors import TRPCError, TRPCErrorCode, data_code_for
 from .router import Procedure, ProcedureKind, Router
+from .validation import (
+    InputValidator,
+    OutputValidator,
+    build_input_validator,
+    build_output_validator,
+)
 
 __all__ = ["ASGIApp", "Message", "Receive", "Scope", "Send", "attach", "mount"]
 
@@ -335,6 +341,7 @@ async def _run_call(
     procedure: Procedure,
     input_value: Any,
     production: bool,
+    validators: tuple[InputValidator | None, OutputValidator | None] | None = None,
 ) -> CallResult:
     """Run one procedure and wrap its outcome in a `CallResult`.
 
@@ -357,6 +364,7 @@ async def _run_call(
         procedure: The registered procedure to run.
         input_value: Decoded JSON input for the call.
         production: When `True`, internal failures never leak details.
+        validators: Optional pair of prebuilt input and output validators.
 
     Returns:
         The success or error result for this call.
@@ -374,12 +382,19 @@ async def _run_call(
         ```
     """
     path = procedure.path
-    if not _input_fits_signature(procedure.handler, input_value):
+    input_validator, output_validator = validators or (None, None)
+    if input_validator is None and not _input_fits_signature(procedure.handler, input_value):
         # Fixed, non-leaking message: a binding failure is a client error, and
         # the raw error text can quote handler internals or client input.
         return _error_result(TRPCErrorCode.BAD_REQUEST, f"Invalid input for procedure {path}")
     try:
-        if inspect.iscoroutinefunction(procedure.handler):
+        if input_validator is not None:
+            args, kwargs = input_validator(input_value)
+            if inspect.iscoroutinefunction(procedure.handler):
+                data = await procedure.handler(*args, **kwargs)
+            else:
+                data = await asyncio.to_thread(procedure.handler, *args, **kwargs)
+        elif inspect.iscoroutinefunction(procedure.handler):
             data = await _call_handler(procedure, input_value)
         else:
             data = await asyncio.to_thread(_call_handler, procedure, input_value)
@@ -395,10 +410,20 @@ async def _run_call(
     except Exception as error:  # adapter boundary: every failure becomes an envelope
         message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
         return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
+    if output_validator is not None:
+        try:
+            data = output_validator(data)
+        except Exception:
+            # Output failures are always internal; do not trust a custom
+            # validator exception's code or message at this boundary.
+            message = (
+                _PRODUCTION_INTERNAL_MESSAGE if production else "Invalid output from procedure"
+            )
+            return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
     try:
         return CallResult.ok(data)
-    except (TypeError, ValueError) as error:
-        message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
+    except Exception:
+        message = _PRODUCTION_INTERNAL_MESSAGE if production else "Invalid output from procedure"
         return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
 
 
@@ -462,6 +487,7 @@ async def _serve_trpc(
     limits: Limits,
     production: bool,
     procedure_path: str,
+    validators: Mapping[str, tuple[InputValidator | None, OutputValidator | None]],
 ) -> None:
     """Parse, dispatch, and answer one HTTP request against the router.
 
@@ -480,6 +506,8 @@ async def _serve_trpc(
         limits: Configured request limits.
         production: When `True`, internal errors never leak details.
         procedure_path: Dotted procedure path extracted from the URL.
+        validators: Validators built once at adapter construction for each
+            registered procedure; later registrations use legacy checks.
 
     Returns:
         `None`. The response has been sent when this coroutine finishes.
@@ -593,7 +621,9 @@ async def _serve_trpc(
                 )
             )
             continue
-        results.append(await _run_call(procedure, call.input, production))
+        results.append(
+            await _run_call(procedure, call.input, production, validators.get(call.path))
+        )
 
     status, body = build_response(results, parsed.batched)
     await _send_response(send, status, body)
@@ -612,7 +642,13 @@ def mount(
     (`app.mount("/trpc", ...)`) or serve it directly with an ASGI server; both
     scopes resolve the procedure path after `path`. Non-HTTP scopes:
     `lifespan` is answered locally (startup/shutdown accepted) and
-    `websocket` connections are closed immediately with code 1008.
+    `websocket` connections are closed immediately with code 1008. Input and
+    output validators are built once for procedures registered when `mount`
+    is called; procedures added later still dispatch with legacy signature
+    checking until a new adapter is constructed. Annotated inputs use
+    Pydantic v2's default lax coercion and reject unknown keys. For a ``*args``-only
+    procedure, a JSON list is unpacked as positional arguments, a scalar is one
+    positional argument, and absent/null input is zero arguments.
 
     Production error policy (`production=True`): exceptions escaping a
     procedure handler and `TRPCError`s with code `INTERNAL_SERVER_ERROR` are
@@ -652,6 +688,12 @@ def mount(
         ```
     """
     resolved_limits = _limits_or_default(limits)
+    # Build validators once for procedures registered at construction. Later
+    # registrations use the legacy signature pre-check.
+    validators = {
+        name: (build_input_validator(proc.handler), build_output_validator(proc.handler))
+        for name, proc in router.procedures.items()
+    }
 
     async def app(scope: Any, receive: Receive, send: Send) -> None:
         """Serve one ASGI request against the router."""
@@ -665,6 +707,7 @@ def mount(
                 limits=resolved_limits,
                 production=production,
                 procedure_path=_procedure_path(scope, path),
+                validators=validators,
             )
         elif scope_type == "websocket":
             # A standalone adapter has nothing to hand a websocket to; close
@@ -696,7 +739,13 @@ def attach(
     Requests whose path equals `path` or starts with `path + "/"` are handled
     by the router (the remainder is the procedure path); every other scope —
     including `websocket` and `lifespan` — is forwarded to the wrapped app
-    untouched. Production error policy (`production=True`): exceptions
+    untouched. Validators are built once for procedures registered when
+    `attach` is called; procedures added later dispatch with legacy signature
+    checking until a new adapter is constructed. Annotated inputs use
+    Pydantic v2's default lax coercion and reject unknown keys. For a ``*args``-only
+    procedure, a JSON list is unpacked as positional arguments, a scalar is one
+    positional argument, and absent/null input is zero arguments. Production
+    error policy (`production=True`): exceptions
     escaping a procedure handler and `TRPCError`s with code
     `INTERNAL_SERVER_ERROR` are sent with the fixed message `"Internal server
     error"` so internal details never leak; `TRPCError`s with any other code
@@ -733,6 +782,12 @@ def attach(
         ```
     """
     resolved_limits = _limits_or_default(limits)
+    # Build validators once for procedures registered at construction. Later
+    # registrations use the legacy signature pre-check.
+    validators = {
+        name: (build_input_validator(proc.handler), build_output_validator(proc.handler))
+        for name, proc in router.procedures.items()
+    }
 
     async def middleware(scope: Any, receive: Receive, send: Send) -> None:
         """Route tRPC requests to the router, forwarding everything else."""
@@ -745,6 +800,7 @@ def attach(
                 limits=resolved_limits,
                 production=production,
                 procedure_path=_procedure_path(scope, path),
+                validators=validators,
             )
             return
         await app(scope, receive, send)

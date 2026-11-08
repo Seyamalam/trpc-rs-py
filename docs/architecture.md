@@ -28,6 +28,11 @@ graph TD
 
 ## Request lifecycle (queries and mutations)
 
+When `mount()` or `attach()` constructs an adapter, it reads registered
+procedure annotations and builds Pydantic validators once. Requests then reuse
+those validators to check parsed inputs before the Python handler and outputs
+after it returns.
+
 ```mermaid
 sequenceDiagram
     participant C as tRPC client
@@ -39,8 +44,11 @@ sequenceDiagram
     A->>P: whole request (method, path, query, body, limits)
     P-->>A: ParsedRequest (calls with decoded inputs)
     A->>A: route each call via Router registry
-    A->>H: handler(input) (validation lands with Pydantic wiring)
+    A->>A: look up prebuilt validators for the procedure
+    A->>A: validate parsed input (BAD_REQUEST on failure)
+    A->>H: handler(validated input)
     H-->>A: output / TRPCError
+    A->>A: validate and serialize annotated output (INTERNAL_SERVER_ERROR on failure)
     A->>B: list[CallResult.ok|error], batched
     B-->>A: (http_status, body)
     A-->>C: JSON response (envelope or envelope array)

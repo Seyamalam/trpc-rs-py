@@ -13,6 +13,7 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Feature Matrix: feature-matrix.md
+  - Validation: validation.md
   - Production Readiness: production-readiness.md
   - Decision Records:
       - 0001 Python version support: decisions/0001-python-version-support.md

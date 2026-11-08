@@ -45,6 +45,7 @@ from ._core import Limits
 from .asgi import ASGIApp, attach, mount
 from .errors import TRPCError, TRPCErrorCode, data_code_for
 from .router import Procedure, ProcedureKind, Router
+from .validation import build_input_validator, build_output_validator
 
 try:
     __version__ = _package_version("trpc-rs-py")
@@ -61,6 +62,8 @@ __all__ = [
     "TRPCErrorCode",
     "__version__",
     "attach",
+    "build_input_validator",
+    "build_output_validator",
     "data_code_for",
     "mount",
 ]
