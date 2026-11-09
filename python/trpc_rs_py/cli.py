@@ -167,6 +167,10 @@ def _copy_traversable(source: _TemplateNode, target: Path, name: str) -> None:
         for child in source.iterdir():
             _copy_traversable(child, target / child.name, name)
         return
+    # `.tmpl` suffixes keep template files out of stubtest/import machinery;
+    # the generated file drops the suffix.
+    if target.suffix == ".tmpl":
+        target = target.with_suffix("")
     data = source.read_bytes()
     try:
         target.write_text(data.decode("utf-8").replace("{{name}}", name))
