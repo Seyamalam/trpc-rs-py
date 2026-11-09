@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generator plus REST/OpenAPI on the same router) and `examples/live-types`
   (`trpc-py dev` regenerating `app-router.d.ts` on save), each with a
   `smoke.sh` run by the gate.
+- Launch materials in `docs/launch/`: recordable demo scripts with VHS
+  tapes (`ai-chat`, `live-types`, `migrate-from-node` marked pending the
+  0.4.0 migration link) and a draft announcement for HN/r/Python/Discord.
 
 ## [0.2.0] - 2026-11-09
 

@@ -245,13 +245,18 @@
 
 ## Next tasks in priority order
 
-1. **0.3.0 in progress.** SSE subscriptions implemented end to end
-   (Rust `SseEncoder`, `@router.subscription` + `tracked`, ASGI streaming with
-   disconnect cancellation, codegen `SubscriptionProcedure`, official-client
-   runtime tests on both adapters) — landing as conventional commits.
-2. Remaining 0.3.0 work: `trpc-py dev` live type sync (argparse CLI per
-   ADR 0006), OpenAPI/REST output (ADR 0005), `trpc-py init` starter,
-   examples + launch materials. Stop at launch and ask user to publish.
+1. **0.3.0 nearly complete.** Landed so far: SSE subscriptions end to end
+   (Rust `SseEncoder`, `@router.subscription` + `tracked`, disconnect
+   cancellation, codegen `SubscriptionProcedure`, official-client runtime
+   tests), `trpc-py dev` live type sync + argparse CLI (`dev`, `codegen ts`,
+   `codegen openapi`, `routes`, `check`, `doctor`), REST/OpenAPI output
+   (`RestRoute` opt-in, `mount_rest`, `generate_openapi`, `merge_openapi`,
+   `attach(rest_path)`, openapi-typescript client verified live), `trpc-py
+   init` Next.js+FastAPI template, `ai-chat`/`live-types` examples, and
+   `docs/launch/` materials.
+2. Remaining 0.3.0 work: benchmark run (optional re-check), CHANGELOG date,
+   `chore(release): v0.3.0` bump + annotated tag + push. Then **STOP** and
+   ask the user to publish + report feedback (MISSION §19).
 
 ## Open questions
 

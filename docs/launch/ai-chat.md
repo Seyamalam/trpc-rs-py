@@ -1,0 +1,35 @@
+# Demo script: ai-chat (SSE token streaming)
+
+**The shot:** an `async def` generator in Python becomes a typed tRPC
+subscription — tokens stream to the client over SSE, and disconnecting
+stops the generation (no wasted LLM tokens).
+
+## Setup
+
+The runnable example is `examples/ai-chat/` — it simulates an LLM so it
+needs no API key:
+
+```bash
+cd examples/ai-chat
+uvicorn app:app --reload
+```
+
+## Narration beats
+
+1. "A chat subscription is just an async generator that yields
+   `tracked(id, chunk)` events."
+2. `curl -N` the SSE endpoint — `event: connected`, then one `data:` frame
+   per token, each with a resumable `id:`.
+3. Show `web`-side: `trpc.chat.subscribe(...)` iterates `{id, data}` items
+   — typed `ChatChunk` from the generated `app-router.d.ts`.
+4. Kill the curl mid-stream: the generator is cancelled; the server stops
+   producing tokens immediately.
+5. Same router, `GET /api/models` — "and non-TS clients get REST + OpenAPI
+   for free."
+
+## VHS tape
+
+`ai-chat.tape` records the terminal half (server + curl stream +
+mid-stream cancel). Record the browser half (the Next.js chat UI) with a
+screen recorder and intercut, or keep the tape self-contained with the
+curl demo.
