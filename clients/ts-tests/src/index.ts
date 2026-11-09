@@ -9,6 +9,7 @@ import {
   createTRPCClient,
   createTRPCProxyClient,
   httpBatchLink,
+  isTRPCClientError,
 } from "@trpc/client";
 import type {
   inferProcedureInput,
@@ -165,6 +166,51 @@ async function positive(): Promise<void> {
   ];
 }
 
+// --- Typed errors: discriminated-union narrowing on `error.data.code` ------
+
+async function typedErrors(): Promise<void> {
+  try {
+    await client.post_by_id_or_fail.query({ post_id: 1 });
+  } catch (error) {
+    if (!isTRPCClientError<AppRouter>(error)) {
+      throw error;
+    }
+    // `error.data.code` discriminates AppRouterErrorShape: declared members
+    // carry their model fields, every other code narrows to the default
+    // shape (no typed fields).
+    switch (error.data?.code) {
+      case "NOT_FOUND": {
+        const postId: number = error.data.post_id;
+        const status: 404 = error.data.httpStatus;
+        const path: string | undefined = error.data.path;
+        void [postId, status, path];
+        break;
+      }
+      case "TOO_MANY_REQUESTS": {
+        const retryAfter: number = error.data.retry_after;
+        void retryAfter;
+        break;
+      }
+      default: {
+        // @ts-expect-error - undeclared codes carry no typed payload fields
+        error.data?.post_id;
+      }
+    }
+    // Procedures without declared errors still expose the router-wide union.
+    try {
+      await client.health.query();
+    } catch (healthError) {
+      if (
+        isTRPCClientError<AppRouter>(healthError) &&
+        healthError.data?.code === "NOT_FOUND"
+      ) {
+        const postId: number = healthError.data.post_id;
+        void postId;
+      }
+    }
+  }
+}
+
 // --- Negative cases: expected type errors --------------------------------
 
 async function negative(): Promise<void> {
@@ -236,4 +282,4 @@ async function negative(): Promise<void> {
   await client.chat.subscribe({ room: "x", lastEventId: "9" });
 }
 
-export { client, negative, positive, proxy };
+export { client, negative, positive, proxy, typedErrors };

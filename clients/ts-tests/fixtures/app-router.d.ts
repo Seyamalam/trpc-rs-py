@@ -13,6 +13,8 @@ import type {
   QueryProcedure,
   Router,
   SubscriptionProcedure,
+  TRPCErrorShape,
+  TRPC_ERROR_CODE_KEY,
   inferRouterInputs,
   inferRouterOutputs,
 } from "@trpc/server/unstable-core-do-not-import";
@@ -20,11 +22,15 @@ import type {
 export type AppRouterRootTypes = {
   ctx: object;
   meta: object;
-  errorShape: DefaultErrorShape;
+  errorShape: AppRouterErrorShape;
   // The Python server sends plain JSON (identity transformer), so the client
   // sees exactly the JSON-serialized values described here.
   transformer: false;
 };
+
+export type AppRouterErrorShape =
+  | TRPCErrorShape<{code: Exclude<TRPC_ERROR_CODE_KEY, "NOT_FOUND">; httpStatus: number; path?: string; stack?: string;}>
+  | TRPCErrorShape<{code: "NOT_FOUND"; httpStatus: 404; path?: string; stack?: string;} & PostRef>;
 
 export interface GreetingInput {
   name: string;
@@ -33,6 +39,10 @@ export interface GreetingInput {
 
 export interface GreetingOutput {
   greeting: string;
+}
+
+export interface PostRef {
+  post_id: number;
 }
 
 export interface CreatedPost {
@@ -49,7 +59,7 @@ export interface PingProcedure
     meta: unknown;
     input: undefined;
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface EchoProcedure
@@ -59,7 +69,7 @@ export interface EchoProcedure
       message: string;
     };
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface GreetProcedure
@@ -69,7 +79,7 @@ export interface GreetProcedure
       params: GreetingInput;
     };
     output: GreetingOutput;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface BoomProcedure
@@ -77,7 +87,7 @@ export interface BoomProcedure
     meta: unknown;
     input: undefined;
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface ExplodeProcedure
@@ -85,7 +95,17 @@ export interface ExplodeProcedure
     meta: unknown;
     input: undefined;
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
+  }> {}
+
+export interface Post_by_id_or_failProcedure
+  extends QueryProcedure<{
+    meta: unknown;
+    input: {
+      post_id: number;
+    };
+    output: string;
+    errorShape: TRPCErrorShape<{code: Exclude<TRPC_ERROR_CODE_KEY, "NOT_FOUND">; httpStatus: number; path?: string; stack?: string;}> | TRPCErrorShape<{code: "NOT_FOUND"; httpStatus: 404; path?: string; stack?: string;} & PostRef>;
   }> {}
 
 export interface Create_postProcedure
@@ -95,7 +115,7 @@ export interface Create_postProcedure
       title: string;
     };
     output: CreatedPost;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface No_inputProcedure
@@ -103,7 +123,7 @@ export interface No_inputProcedure
     meta: unknown;
     input: undefined;
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface TicksProcedure
@@ -111,7 +131,7 @@ export interface TicksProcedure
     meta: unknown;
     input: undefined;
     output: AsyncIterable<{ id: string; data: Tick; }>;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export type AppRouterRecord = {
@@ -120,6 +140,7 @@ export type AppRouterRecord = {
   greet: GreetProcedure;
   boom: BoomProcedure;
   explode: ExplodeProcedure;
+  post_by_id_or_fail: Post_by_id_or_failProcedure;
   create_post: Create_postProcedure;
   no_input: No_inputProcedure;
   ticks: TicksProcedure;

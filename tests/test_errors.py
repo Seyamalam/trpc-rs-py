@@ -7,25 +7,36 @@ import pytest
 from trpc_rs_py import TRPCError, TRPCErrorCode
 from trpc_rs_py.errors import data_code_for
 
-# The official tRPC v11 data codes, mirroring crates/trpc-core/src/error.rs.
+# The official tRPC v11 data codes (TRPC_ERROR_CODES_BY_KEY in
+# @trpc/server@11.25.0), mirroring crates/trpc-core/src/error.rs.
 EXPECTED_DATA_CODES: dict[TRPCErrorCode, int] = {
     TRPCErrorCode.PARSE_ERROR: -32700,
-    TRPCErrorCode.BAD_REQUEST: -33600,
+    TRPCErrorCode.BAD_REQUEST: -32600,
     TRPCErrorCode.INTERNAL_SERVER_ERROR: -32603,
-    TRPCErrorCode.NOT_FOUND: -32004,
+    TRPCErrorCode.NOT_IMPLEMENTED: -32603,
+    TRPCErrorCode.BAD_GATEWAY: -32603,
+    TRPCErrorCode.SERVICE_UNAVAILABLE: -32603,
+    TRPCErrorCode.GATEWAY_TIMEOUT: -32603,
     TRPCErrorCode.UNAUTHORIZED: -32001,
+    TRPCErrorCode.PAYMENT_REQUIRED: -32002,
     TRPCErrorCode.FORBIDDEN: -32003,
+    TRPCErrorCode.NOT_FOUND: -32004,
     TRPCErrorCode.METHOD_NOT_SUPPORTED: -32005,
     TRPCErrorCode.TIMEOUT: -32008,
     TRPCErrorCode.CONFLICT: -32009,
-    TRPCErrorCode.PAYLOAD_TOO_LARGE: -32007,
     TRPCErrorCode.PRECONDITION_FAILED: -32012,
-    TRPCErrorCode.CLIENT_CLOSED_REQUEST: -32012,
+    TRPCErrorCode.PAYLOAD_TOO_LARGE: -32013,
+    TRPCErrorCode.UNSUPPORTED_MEDIA_TYPE: -32015,
+    TRPCErrorCode.UNPROCESSABLE_CONTENT: -32022,
+    TRPCErrorCode.PRECONDITION_REQUIRED: -32028,
+    TRPCErrorCode.TOO_MANY_REQUESTS: -32029,
+    TRPCErrorCode.CLIENT_CLOSED_REQUEST: -32099,
 }
 
 
-def test_exactly_twelve_official_codes_exist() -> None:
+def test_all_official_codes_exist() -> None:
     assert {member.name for member in TRPCErrorCode} == {code.name for code in EXPECTED_DATA_CODES}
+    assert len(TRPCErrorCode) == 21
 
 
 @pytest.mark.parametrize("code", list(TRPCErrorCode))
@@ -34,12 +45,16 @@ def test_data_code_mapping_mirrors_error_rs(code: TRPCErrorCode) -> None:
     assert code.value == code.name
 
 
-def test_precondition_failed_and_client_closed_request_share_data_code() -> None:
-    # tRPC's own quirk: both map to -32012. We mirror it exactly.
+def test_internal_server_error_block_shares_one_data_code() -> None:
+    # tRPC's own quirk: five distinct codes share the -32603 data code and
+    # differ only by HTTP status. We mirror it exactly.
     assert (
-        data_code_for(TRPCErrorCode.PRECONDITION_FAILED)
-        == data_code_for(TRPCErrorCode.CLIENT_CLOSED_REQUEST)
-        == -32012
+        data_code_for(TRPCErrorCode.INTERNAL_SERVER_ERROR)
+        == data_code_for(TRPCErrorCode.NOT_IMPLEMENTED)
+        == data_code_for(TRPCErrorCode.BAD_GATEWAY)
+        == data_code_for(TRPCErrorCode.SERVICE_UNAVAILABLE)
+        == data_code_for(TRPCErrorCode.GATEWAY_TIMEOUT)
+        == -32603
     )
 
 
@@ -79,4 +94,4 @@ def test_data_code_for_is_publicly_importable() -> None:
     import trpc_rs_py
 
     assert trpc_rs_py.data_code_for(trpc_rs_py.TRPCErrorCode.NOT_FOUND) == -32004
-    assert trpc_rs_py.data_code_for(trpc_rs_py.TRPCErrorCode.CLIENT_CLOSED_REQUEST) == -32012
+    assert trpc_rs_py.data_code_for(trpc_rs_py.TRPCErrorCode.CLIENT_CLOSED_REQUEST) == -32099

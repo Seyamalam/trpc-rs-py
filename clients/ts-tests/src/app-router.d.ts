@@ -13,6 +13,8 @@ import type {
   QueryProcedure,
   Router,
   SubscriptionProcedure,
+  TRPCErrorShape,
+  TRPC_ERROR_CODE_KEY,
   inferRouterInputs,
   inferRouterOutputs,
 } from "@trpc/server/unstable-core-do-not-import";
@@ -20,11 +22,16 @@ import type {
 export type AppRouterRootTypes = {
   ctx: object;
   meta: object;
-  errorShape: DefaultErrorShape;
+  errorShape: AppRouterErrorShape;
   // The Python server sends plain JSON (identity transformer), so the client
   // sees exactly the JSON-serialized values described here.
   transformer: false;
 };
+
+export type AppRouterErrorShape =
+  | TRPCErrorShape<{code: Exclude<TRPC_ERROR_CODE_KEY, "NOT_FOUND" | "TOO_MANY_REQUESTS">; httpStatus: number; path?: string; stack?: string;}>
+  | TRPCErrorShape<{code: "NOT_FOUND"; httpStatus: 404; path?: string; stack?: string;} & PostRef>
+  | TRPCErrorShape<{code: "TOO_MANY_REQUESTS"; httpStatus: 429; path?: string; stack?: string;} & RateLimitInfo>;
 
 export interface Tag {
   label: string;
@@ -37,6 +44,14 @@ export interface Post {
   color: "red" | "blue";
   note?: string | null;
   meta?: Record<string, number>;
+}
+
+export interface PostRef {
+  post_id: number;
+}
+
+export interface RateLimitInfo {
+  retry_after: number;
 }
 
 export interface Author {
@@ -103,7 +118,7 @@ export interface HealthProcedure
     meta: unknown;
     input: undefined;
     output: boolean;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Post_by_idProcedure
@@ -113,7 +128,17 @@ export interface Post_by_idProcedure
       post_id: number;
     };
     output: Post;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
+  }> {}
+
+export interface Post_by_id_or_failProcedure
+  extends QueryProcedure<{
+    meta: unknown;
+    input: {
+      post_id: number;
+    };
+    output: Post;
+    errorShape: TRPCErrorShape<{code: Exclude<TRPC_ERROR_CODE_KEY, "NOT_FOUND" | "TOO_MANY_REQUESTS">; httpStatus: number; path?: string; stack?: string;}> | TRPCErrorShape<{code: "NOT_FOUND"; httpStatus: 404; path?: string; stack?: string;} & PostRef> | TRPCErrorShape<{code: "TOO_MANY_REQUESTS"; httpStatus: 429; path?: string; stack?: string;} & RateLimitInfo>;
   }> {}
 
 export interface Create_postProcedure
@@ -125,7 +150,7 @@ export interface Create_postProcedure
       source?: "web" | "app";
     };
     output: Post;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Search_itemsProcedure
@@ -136,7 +161,7 @@ export interface Search_itemsProcedure
       limit?: number;
     };
     output: Array<string>;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface No_inputProcedure
@@ -144,7 +169,7 @@ export interface No_inputProcedure
     meta: unknown;
     input: undefined;
     output: string;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Echo_allProcedure
@@ -154,7 +179,7 @@ export interface Echo_allProcedure
       payload: number | string | boolean | null;
     };
     output: [number, string] | null;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Node_treeProcedure
@@ -164,7 +189,7 @@ export interface Node_treeProcedure
       root: Node;
     };
     output: Node;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Keyword_pingProcedure
@@ -174,7 +199,7 @@ export interface Keyword_pingProcedure
       item: _class;
     };
     output: _class;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Keyword_round_tripProcedure
@@ -184,7 +209,7 @@ export interface Keyword_round_tripProcedure
       item: _never;
     };
     output: _undefined;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Helper_namesProcedure
@@ -194,7 +219,7 @@ export interface Helper_namesProcedure
       item: inferRouterInputs_2;
     };
     output: inferRouterOutputs_2;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Wire_aliasProcedure
@@ -204,7 +229,7 @@ export interface Wire_aliasProcedure
       item: WireAlias;
     };
     output: WireAlias;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Builtin_shadowProcedure
@@ -214,7 +239,7 @@ export interface Builtin_shadowProcedure
       item: _Array;
     };
     output: _Record;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface Type_keywordProcedure
@@ -226,7 +251,7 @@ export interface Type_keywordProcedure
       third: _readonly;
     };
     output: _unique;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface TicksProcedure
@@ -234,7 +259,7 @@ export interface TicksProcedure
     meta: unknown;
     input: undefined;
     output: AsyncIterable<number>;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface ChatProcedure
@@ -244,7 +269,7 @@ export interface ChatProcedure
       room: string;
     };
     output: AsyncIterable<{ id: string; data: Post; }>;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export interface TreeBy_idProcedure
@@ -254,12 +279,13 @@ export interface TreeBy_idProcedure
       node_id: number;
     };
     output: Node;
-    errorShape: DefaultErrorShape;
+    errorShape: AppRouterErrorShape;
   }> {}
 
 export type AppRouterRecord = {
   health: HealthProcedure;
   post_by_id: Post_by_idProcedure;
+  post_by_id_or_fail: Post_by_id_or_failProcedure;
   create_post: Create_postProcedure;
   "search-items": Search_itemsProcedure;
   no_input: No_inputProcedure;

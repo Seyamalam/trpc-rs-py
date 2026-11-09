@@ -174,6 +174,27 @@ for (const framework of ["fastapi", "starlette"] as const) {
       });
     });
 
+    it("a declared typed error reaches the client with model fields in data", async () => {
+      await assert.rejects(
+        ctx.client.post_by_id_or_fail.query({ post_id: 7 }),
+        (error: unknown) => {
+          assertTrpcError(error, {
+            code: "NOT_FOUND",
+            httpStatus: 404,
+            message: "no such post",
+          });
+          if (error instanceof TRPCClientError) {
+            const data = error.data as Record<string, unknown> | undefined;
+            // Typed payload merges into error.data alongside the official
+            // fields — exactly what a Node errorFormatter produces.
+            assert.equal(data?.post_id, 7, "data.post_id (typed payload)");
+            assert.equal(data?.path, "post_by_id_or_fail", "data.path");
+          }
+          return true;
+        },
+      );
+    });
+
     it("an unknown procedure rejects with NOT_FOUND", async () => {
       await assert.rejects(
         ctx.untyped.query("definitely_not_a_procedure", undefined),

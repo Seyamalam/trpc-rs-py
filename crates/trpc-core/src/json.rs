@@ -48,15 +48,21 @@ pub(crate) fn result_envelope(output: &Value) -> Value {
 /// Build the default tRPC v11 error envelope.
 pub(crate) fn error_envelope(error: &TrpcError) -> Value {
     // The default tRPC v11 error shape is flat under `error`; the `json`
-    // transformer wrapper is not part of the error envelope.
+    // transformer wrapper is not part of the error envelope. Typed-error
+    // `extra` fields merge into `data` first so the official `code` and
+    // `httpStatus` keys always win on collisions — the same rule a Node
+    // `errorFormatter` gets from spreading `...shape.data` last.
+    let mut data = error.extra.clone().unwrap_or_default();
+    data.insert("code".to_owned(), Value::String(error.code_name.clone()));
+    data.insert(
+        "httpStatus".to_owned(),
+        Value::Number(error.http_status.into()),
+    );
     serde_json::json!({
         "error": {
             "message": error.message,
             "code": error.data_code,
-            "data": {
-                "code": error.code_name,
-                "httpStatus": error.http_status
-            }
+            "data": Value::Object(data)
         }
     })
 }

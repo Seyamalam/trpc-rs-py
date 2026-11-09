@@ -42,17 +42,17 @@ def test_parse_post_single_and_batch() -> None:
 @pytest.mark.parametrize(
     ("path", "query", "body", "limits", "code", "data_code", "status"),
     [
-        ("x", "", b"12345", Limits(max_body_size=4), "PAYLOAD_TOO_LARGE", -32007, 413),
+        ("x", "", b"12345", Limits(max_body_size=4), "PAYLOAD_TOO_LARGE", -32013, 413),
         (
             "a,b",
             "batch=1&input=%7B%220%22%3A1%2C%221%22%3A2%7D",
             None,
             Limits(max_batch_size=1),
             "PAYLOAD_TOO_LARGE",
-            -32007,
+            -32013,
             413,
         ),
-        ("x", "", b'{"a":{"b":1}}', Limits(max_json_depth=1), "BAD_REQUEST", -33600, 400),
+        ("x", "", b'{"a":{"b":1}}', Limits(max_json_depth=1), "BAD_REQUEST", -32600, 400),
     ],
 )
 def test_protocol_error_attributes(

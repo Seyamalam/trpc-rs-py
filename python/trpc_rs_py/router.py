@@ -36,11 +36,14 @@ from collections.abc import (
     Callable,
     Coroutine,
     Mapping,
+    Sequence,
 )
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType, UnionType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
+
+from .errors import TRPCError, validate_error_class
 
 if TYPE_CHECKING:
     from typing_extensions import TypeVarTuple, Unpack
@@ -115,7 +118,7 @@ class Procedure:
     handler: Callable[..., Any]
     input_annotation: Any = None
     output_annotation: Any = None
-    errors: tuple[type[Exception], ...] = ()
+    errors: tuple[type[TRPCError], ...] = ()
     rest: RestRoute | None = None
 
     def __replace__(self, /, **changes: Any) -> Procedure:
@@ -575,11 +578,19 @@ class Router:
 
     @overload
     def query(
-        self, *, name: str | None = ..., rest: RestRoute | None = ...
+        self,
+        *,
+        name: str | None = ...,
+        rest: RestRoute | None = ...,
+        errors: Sequence[type[TRPCError]] = ...,
     ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
 
     def query(
-        self, *args: Any, name: str | None = None, rest: RestRoute | None = None
+        self,
+        *args: Any,
+        name: str | None = None,
+        rest: RestRoute | None = None,
+        errors: Sequence[type[TRPCError]] = (),
     ) -> Callable[..., Any]:
         """Register a query procedure; usable bare or with a `name` override.
 
@@ -590,6 +601,8 @@ class Router:
                 `__name__`.
             rest: Optional `RestRoute` metadata opting the procedure into the
                 REST endpoints and OpenAPI document served by `mount_rest`.
+            errors: `TRPCError` subclasses the procedure may raise; they
+                enter the generated TypeScript error union (ADR 0009).
 
         Returns:
             The function itself when used bare, otherwise a decorator.
@@ -611,18 +624,26 @@ class Router:
             assert "user_by_id" in router.procedures
             ```
         """
-        return self._register(ProcedureKind.QUERY, args, name, rest)
+        return self._register(ProcedureKind.QUERY, args, name, rest, errors)
 
     @overload
     def mutation(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...
 
     @overload
     def mutation(
-        self, *, name: str | None = ..., rest: RestRoute | None = ...
+        self,
+        *,
+        name: str | None = ...,
+        rest: RestRoute | None = ...,
+        errors: Sequence[type[TRPCError]] = ...,
     ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
 
     def mutation(
-        self, *args: Any, name: str | None = None, rest: RestRoute | None = None
+        self,
+        *args: Any,
+        name: str | None = None,
+        rest: RestRoute | None = None,
+        errors: Sequence[type[TRPCError]] = (),
     ) -> Callable[..., Any]:
         """Register a mutation procedure; usable bare or with a `name` override.
 
@@ -633,6 +654,8 @@ class Router:
                 `__name__`.
             rest: Optional `RestRoute` metadata opting the procedure into the
                 REST endpoints and OpenAPI document served by `mount_rest`.
+            errors: `TRPCError` subclasses the procedure may raise; they
+                enter the generated TypeScript error union (ADR 0009).
 
         Returns:
             The function itself when used bare, otherwise a decorator.
@@ -654,17 +677,19 @@ class Router:
             assert "rename_user" in router.procedures
             ```
         """
-        return self._register(ProcedureKind.MUTATION, args, name, rest)
+        return self._register(ProcedureKind.MUTATION, args, name, rest, errors)
 
     @overload
     def subscription(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...
 
     @overload
     def subscription(
-        self, *, name: str | None = ...
+        self, *, name: str | None = ..., errors: Sequence[type[TRPCError]] = ...
     ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
 
-    def subscription(self, *args: Any, name: str | None = None) -> Callable[..., Any]:
+    def subscription(
+        self, *args: Any, name: str | None = None, errors: Sequence[type[TRPCError]] = ()
+    ) -> Callable[..., Any]:
         """Register a subscription procedure; usable bare or with a `name`.
 
         The handler must return an async iterable (typically an `async def`
@@ -679,6 +704,8 @@ class Router:
                 accepted.
             name: Explicit procedure name; defaults to the function's
                 `__name__`.
+            errors: `TRPCError` subclasses the procedure may raise; they
+                feed the generated discriminated error union.
 
         Returns:
             The function itself when used bare, otherwise a decorator.
@@ -701,7 +728,7 @@ class Router:
                 yield 1
             ```
         """
-        return self._register(ProcedureKind.SUBSCRIPTION, args, name, None)
+        return self._register(ProcedureKind.SUBSCRIPTION, args, name, None, errors)
 
     def _register(
         self,
@@ -709,6 +736,7 @@ class Router:
         args: tuple[Any, ...],
         name: str | None,
         rest: RestRoute | None,
+        errors: Sequence[type[TRPCError]],
     ) -> Callable[..., Any]:
         """Shared registration path for `query` and `mutation`.
 
@@ -718,6 +746,7 @@ class Router:
                 when the decorator is used bare.
             name: Explicit name override, or `None` to use `__name__`.
             rest: Optional `RestRoute` REST/OpenAPI opt-in metadata.
+            errors: `TRPCError` subclasses the procedure may raise.
 
         Returns:
             The handler unchanged when used bare, otherwise the decorator.
@@ -769,13 +798,15 @@ class Router:
                         f"{handler.__name__}() has no such parameters"
                     )
                     raise ValueError(msg)
+            for error_type in errors:
+                validate_error_class(error_type)
             self._procedures[path] = Procedure(
                 path=path,
                 kind=kind,
                 handler=handler,
                 input_annotation=_input_annotation_of(hints, signature),
                 output_annotation=hints.get("return"),
-                errors=(),
+                errors=tuple(errors),
                 rest=rest,
             )
             return handler

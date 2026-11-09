@@ -56,19 +56,29 @@ Per-call error envelope — the **official v11 shape**, verified against a real
   "error": {
     "message": "deliberate not found",
     "code": -32004,
-    "data": {"code": "NOT_FOUND", "httpStatus": 404}
+    "data": {"code": "NOT_FOUND", "httpStatus": 404, "path": "posts.byId"}
   }
 }
 ```
 
 `error.code` is the numeric JSON-RPC-style code, `error.data.code` the
 machine-readable name (same table as `crates/trpc-core/src/error.rs`, mirrored
-in `python/trpc_rs_py/errors.py`). The official client requires exactly this
-placement: `transformResult` accepts an error only when `error.code` is a
-number and `error.message` a string, and surfaces `error.data` as the client
-error's `data`/`shape.data`. The official server additionally includes
-`data.path` and `data.stack` (stack only in development mode); the client
-treats both as optional, so their absence is compatible.
+in `python/trpc_rs_py/errors.py`), `error.data.path` the attempted procedure
+path — the same fields the official `getErrorShape` emits for procedure-level
+errors. The official client requires exactly this placement: `transformResult`
+accepts an error only when `error.code` is a number and `error.message` a
+string, and surfaces `error.data` as the client error's `data`/`shape.data`.
+The official server additionally includes `data.stack` in development mode;
+the client treats it as optional, so its absence is compatible.
+
+Typed errors: when a handler raises a `TRPCError` carrying `data`, mapping
+payloads merge into `error.data` alongside the official fields (any other
+JSON value lands under `error.data.data`) — the same shape a Node
+`errorFormatter` produces when it returns `{...shape.data, ...fields}`.
+Reserved keys (`code`, `httpStatus`, `path`, `stack`) cannot be overridden:
+the envelope invariants always win. Declaring the error classes on the
+procedure (`errors=[...]`) makes the generated TypeScript expose them as a
+discriminated union — see `docs/typed-errors.md`.
 
 ## HTTP status codes
 

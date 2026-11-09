@@ -46,7 +46,7 @@ from urllib.parse import parse_qs, unquote
 
 from ._core import CallResult, Limits, build_response
 from .asgi import ASGIApp, Receive, Scope, Send
-from .errors import TRPCError, TRPCErrorCode
+from .errors import TRPCError, TRPCErrorCode, error_data_payload, http_status_for
 from .openapi import generate_openapi
 from .router import Procedure, ProcedureKind, RestRoute, Router
 from .validation import (
@@ -59,22 +59,6 @@ from .validation import (
 __all__ = ["mount_rest"]
 
 _PRODUCTION_INTERNAL_MESSAGE = "Internal server error"
-
-# Mirrors `_HTTP_STATUSES` in asgi.py; duplicated so this module stands alone.
-_HTTP_STATUSES: dict[TRPCErrorCode, int] = {
-    TRPCErrorCode.PARSE_ERROR: 400,
-    TRPCErrorCode.BAD_REQUEST: 400,
-    TRPCErrorCode.INTERNAL_SERVER_ERROR: 500,
-    TRPCErrorCode.NOT_FOUND: 404,
-    TRPCErrorCode.UNAUTHORIZED: 401,
-    TRPCErrorCode.FORBIDDEN: 403,
-    TRPCErrorCode.METHOD_NOT_SUPPORTED: 405,
-    TRPCErrorCode.TIMEOUT: 408,
-    TRPCErrorCode.CONFLICT: 409,
-    TRPCErrorCode.PAYLOAD_TOO_LARGE: 413,
-    TRPCErrorCode.PRECONDITION_FAILED: 412,
-    TRPCErrorCode.CLIENT_CLOSED_REQUEST: 499,
-}
 
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
@@ -435,7 +419,13 @@ async def _run(route: _Route, input_value: Any, production: bool) -> tuple[int, 
         message = error.message
         if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
             message = _PRODUCTION_INTERNAL_MESSAGE
-        return _HTTP_STATUSES[error.code], _error_object(error.code.value, message)
+        body = _error_object(error.code.value, message)
+        payload = error_data_payload(error)
+        if isinstance(payload, dict):
+            body["error"]["data"] = payload
+        elif payload is not None:
+            body["error"]["data"] = {"data": payload}
+        return http_status_for(error.code), body
     except Exception as error:
         message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
         return 500, _error_object("INTERNAL_SERVER_ERROR", message)

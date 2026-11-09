@@ -32,6 +32,19 @@ class Tick(BaseModel):
     tick: int
 
 
+class PostRef(BaseModel):
+    """Typed payload of `PostNotFound`: which post id was missing."""
+
+    post_id: int
+
+
+class PostNotFound(TRPCError):
+    """Declared typed error raised by `post_by_id_or_fail`."""
+
+    code = TRPCErrorCode.NOT_FOUND
+    data_model = PostRef
+
+
 def build_fixture_router() -> Router:
     """Build the router served by both fixture servers."""
     router = Router()
@@ -56,6 +69,10 @@ def build_fixture_router() -> Router:
     @router.query
     def explode() -> str:
         raise RuntimeError("unexpected fixture failure")
+
+    @router.query(errors=[PostNotFound])
+    def post_by_id_or_fail(post_id: int) -> str:
+        raise PostNotFound("no such post", data=PostRef(post_id=post_id))
 
     @router.mutation(rest=RestRoute("POST", "/posts"))
     def create_post(title: str) -> CreatedPost:

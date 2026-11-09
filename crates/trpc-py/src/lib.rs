@@ -35,6 +35,28 @@ mod ffi {
 
     create_exception!(trpc_rs_py._core, TrpcProtocolError, PyException);
 
+    /// Convert a Python typed-error payload to the `error.data` extra map.
+    ///
+    /// Dictionaries merge into `error.data`; other JSON values land under a
+    /// `data` key. Official `code`/`httpStatus` keys are stripped so the
+    /// envelope cannot be spoofed.
+    fn extra_from_python(
+        payload: &Bound<'_, PyAny>,
+    ) -> PyResult<serde_json::Map<String, serde_json::Value>> {
+        let value = python_to_json_value(payload, 0)?;
+        let mut extra = match value {
+            serde_json::Value::Object(map) => map,
+            other => {
+                let mut map = serde_json::Map::new();
+                map.insert("data".to_owned(), other);
+                map
+            }
+        };
+        extra.remove("code");
+        extra.remove("httpStatus");
+        Ok(extra)
+    }
+
     /// Configurable request limits.
     #[pyclass(
         module = "trpc_rs_py._core",
@@ -156,13 +178,19 @@ mod ffi {
         }
 
         /// Create an error result using a validated official tRPC error code.
+        ///
+        /// `data` is an optional typed-error payload: dictionaries merge
+        /// into `error.data` next to `code`/`httpStatus`; any other JSON
+        /// value lands under `error.data.data`.
         #[staticmethod]
+        #[pyo3(signature = (message, code, data_code, http_status, code_name, data=None))]
         fn error(
             message: String,
             code: &str,
             data_code: i32,
             http_status: u16,
             code_name: &str,
+            data: Option<&Bound<'_, PyAny>>,
         ) -> PyResult<Self> {
             let parsed = ErrorCode::from_name(code_name).ok_or_else(|| {
                 PyValueError::new_err(format!("unsupported tRPC error code: {code_name}"))
@@ -177,9 +205,11 @@ mod ffi {
                     parsed.http_status()
                 )));
             }
-            Ok(Self {
-                result: Err(TrpcError::new(parsed, message)),
-            })
+            let mut error = TrpcError::new(parsed, message);
+            if let Some(payload) = data {
+                error = error.with_extra(extra_from_python(payload)?);
+            }
+            Ok(Self { result: Err(error) })
         }
     }
 
@@ -260,12 +290,25 @@ mod ffi {
         }
 
         /// Encode a `serialized-error` frame for an official error code name.
+        ///
+        /// `data` carries a typed-error payload like `CallResult.error`:
+        /// dictionaries merge into the flat shape's `data`; other JSON
+        /// values land under `data.data`.
         #[staticmethod]
-        fn serialized_error(message: &str, code_name: &str) -> PyResult<Vec<u8>> {
+        #[pyo3(signature = (message, code_name, data=None))]
+        fn serialized_error(
+            message: &str,
+            code_name: &str,
+            data: Option<&Bound<'_, PyAny>>,
+        ) -> PyResult<Vec<u8>> {
             let code = ErrorCode::from_name(code_name).ok_or_else(|| {
                 PyValueError::new_err(format!("unsupported tRPC error code: {code_name}"))
             })?;
-            sse::SseEncoder::serialized_error(&TrpcError::new(code, message))
+            let mut error = TrpcError::new(code, message);
+            if let Some(payload) = data {
+                error = error.with_extra(extra_from_python(payload)?);
+            }
+            sse::SseEncoder::serialized_error(&error)
                 .map(String::into_bytes)
                 .map_err(|error| PyValueError::new_err(error.message))
         }
@@ -615,14 +658,23 @@ mod ffi {
                 ErrorCode::ParseError,
                 ErrorCode::BadRequest,
                 ErrorCode::InternalServerError,
-                ErrorCode::NotFound,
+                ErrorCode::NotImplemented,
+                ErrorCode::BadGateway,
+                ErrorCode::ServiceUnavailable,
+                ErrorCode::GatewayTimeout,
                 ErrorCode::Unauthorized,
+                ErrorCode::PaymentRequired,
                 ErrorCode::Forbidden,
+                ErrorCode::NotFound,
                 ErrorCode::MethodNotSupported,
                 ErrorCode::Timeout,
                 ErrorCode::Conflict,
-                ErrorCode::PayloadTooLarge,
                 ErrorCode::PreconditionFailed,
+                ErrorCode::PayloadTooLarge,
+                ErrorCode::UnsupportedMediaType,
+                ErrorCode::UnprocessableContent,
+                ErrorCode::PreconditionRequired,
+                ErrorCode::TooManyRequests,
                 ErrorCode::ClientClosedRequest,
             ];
             for code in codes {
@@ -633,6 +685,7 @@ mod ffi {
                         code.code(),
                         code.http_status(),
                         code.name(),
+                        None,
                     )
                     .is_ok()
                 );
@@ -648,7 +701,8 @@ mod ffi {
                     "BAD_REQUEST",
                     valid.code(),
                     valid.http_status(),
-                    valid.name()
+                    valid.name(),
+                    None,
                 )
                 .is_err()
             );
@@ -658,7 +712,8 @@ mod ffi {
                     valid.name(),
                     valid.code() + 1,
                     valid.http_status(),
-                    valid.name()
+                    valid.name(),
+                    None,
                 )
                 .is_err()
             );
@@ -668,11 +723,15 @@ mod ffi {
                     valid.name(),
                     valid.code(),
                     valid.http_status() + 1,
-                    valid.name()
+                    valid.name(),
+                    None,
                 )
                 .is_err()
             );
-            assert!(PyCallResult::error("failure".to_owned(), "UNKNOWN", 0, 0, "UNKNOWN").is_err());
+            assert!(
+                PyCallResult::error("failure".to_owned(), "UNKNOWN", 0, 0, "UNKNOWN", None)
+                    .is_err()
+            );
         }
 
         #[test]

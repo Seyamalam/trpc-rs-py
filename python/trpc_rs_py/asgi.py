@@ -67,7 +67,13 @@ from ._core import (
     build_response,
     parse_request,
 )
-from .errors import TRPCError, TRPCErrorCode, data_code_for
+from .errors import (
+    TRPCError,
+    TRPCErrorCode,
+    data_code_for,
+    error_data_payload,
+    http_status_for,
+)
 from .router import Procedure, ProcedureKind, Router
 from .streaming import Tracked
 from .validation import (
@@ -99,21 +105,6 @@ ASGIApp: TypeAlias = Callable[[Scope, Receive, Send], Awaitable[None]]
 # HTTP status for each official tRPC error code, mirroring
 # `ErrorCode::http_status` in crates/trpc-core/src/error.rs. The core validates
 # that `CallResult.error` statuses match this table.
-_HTTP_STATUSES: Mapping[TRPCErrorCode, int] = {
-    TRPCErrorCode.PARSE_ERROR: 400,
-    TRPCErrorCode.BAD_REQUEST: 400,
-    TRPCErrorCode.INTERNAL_SERVER_ERROR: 500,
-    TRPCErrorCode.NOT_FOUND: 404,
-    TRPCErrorCode.UNAUTHORIZED: 401,
-    TRPCErrorCode.FORBIDDEN: 403,
-    TRPCErrorCode.METHOD_NOT_SUPPORTED: 405,
-    TRPCErrorCode.TIMEOUT: 408,
-    TRPCErrorCode.CONFLICT: 409,
-    TRPCErrorCode.PAYLOAD_TOO_LARGE: 413,
-    TRPCErrorCode.PRECONDITION_FAILED: 412,
-    TRPCErrorCode.CLIENT_CLOSED_REQUEST: 499,
-}
-
 _PRODUCTION_INTERNAL_MESSAGE = "Internal server error"
 
 # Response headers for subscription streams, mirroring the official
@@ -136,13 +127,59 @@ class _ClientDisconnected(Exception):
     """Internal sentinel: the client disconnected before the body was complete."""
 
 
-def _error_result(code: TRPCErrorCode, message: str) -> CallResult:
+# Keys reserved by the wire envelope inside `error.data`; a typed-error
+# payload can never set them (ADR 0009 — "the envelope invariants win").
+# `code`/`httpStatus` are also enforced by the core serializer at the Rust
+# boundary; `path` is injected here from the call site.
+_RESERVED_DATA_KEYS = frozenset({"code", "httpStatus", "path", "stack"})
+
+
+def _envelope_data(data: Any | None, path: str | None) -> dict[str, Any] | None:
+    """Merge a procedure path and typed payload into the `error.data` extras.
+
+    Mirrors the official `getErrorShape`: `data.path` is set whenever the
+    call path is known, and reserved keys from user payloads are dropped.
+
+    Args:
+        data: Typed-error payload from `error_data_payload` (dict payload
+            merges inline; any other JSON value lands under `data.data`).
+        path: The dotted procedure path, or `None` when unknown.
+
+    Returns:
+        The extras map for the envelope, or `None` when empty.
+    """
+    merged: dict[str, Any] = {}
+    if isinstance(data, dict):
+        merged.update(_user_fields(cast("dict[str, Any]", data)))
+    elif data is not None:
+        merged["data"] = data
+    if path is not None:
+        merged["path"] = path
+    return merged or None
+
+
+def _user_fields(data: dict[Any, Any]) -> dict[str, Any]:
+    """Drop reserved and non-string keys from a typed-error dict payload."""
+    return {
+        key: value
+        for key, value in data.items()
+        if isinstance(key, str) and key not in _RESERVED_DATA_KEYS
+    }
+
+
+def _error_result(
+    code: TRPCErrorCode, message: str, data: Any | None = None, *, path: str | None = None
+) -> CallResult:
     """Build a `CallResult.error` for `code`, keeping code/status tables in sync.
 
     Args:
         code: Official tRPC error code.
         message: Message sent to the client. Callers must never interpolate
             raw client input here.
+        data: Optional typed-error payload merged into `error.data` by the
+            core serializer (reserved `code`/`httpStatus` keys win).
+        path: Dotted procedure path injected as `error.data.path`, matching
+            the official `getErrorShape` for procedure-level errors.
 
     Returns:
         An error result carrying the code's data code and HTTP status.
@@ -152,11 +189,13 @@ def _error_result(code: TRPCErrorCode, message: str) -> CallResult:
         from trpc_rs_py._asgi import _error_result
         from trpc_rs_py.errors import TRPCErrorCode
 
-        result = _error_result(TRPCErrorCode.NOT_FOUND, "missing")
+        result = _error_result(TRPCErrorCode.NOT_FOUND, "missing", path="posts.byId")
         ```
     """
     name = code.value
-    return CallResult.error(message, name, data_code_for(code), _HTTP_STATUSES[code], name)
+    return CallResult.error(
+        message, name, data_code_for(code), http_status_for(code), name, _envelope_data(data, path)
+    )
 
 
 def _header(headers: Iterable[tuple[bytes, bytes]], name: bytes) -> bytes | None:
@@ -406,7 +445,9 @@ async def _run_call(
     if input_validator is None and not _input_fits_signature(procedure.handler, input_value):
         # Fixed, non-leaking message: a binding failure is a client error, and
         # the raw error text can quote handler internals or client input.
-        return _error_result(TRPCErrorCode.BAD_REQUEST, f"Invalid input for procedure {path}")
+        return _error_result(
+            TRPCErrorCode.BAD_REQUEST, f"Invalid input for procedure {path}", path=path
+        )
     try:
         if input_validator is not None:
             args, kwargs = input_validator(input_value)
@@ -426,10 +467,10 @@ async def _run_call(
         message = error.message
         if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
             message = _PRODUCTION_INTERNAL_MESSAGE
-        return _error_result(error.code, message)
+        return _error_result(error.code, message, error_data_payload(error), path=path)
     except Exception as error:  # adapter boundary: every failure becomes an envelope
         message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
-        return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
+        return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message, path=path)
     if output_validator is not None:
         try:
             data = output_validator(data)
@@ -439,12 +480,12 @@ async def _run_call(
             message = (
                 _PRODUCTION_INTERNAL_MESSAGE if production else "Invalid output from procedure"
             )
-            return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
+            return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message, path=path)
     try:
         return CallResult.ok(data)
     except Exception:
         message = _PRODUCTION_INTERNAL_MESSAGE if production else "Invalid output from procedure"
-        return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message)
+        return _error_result(TRPCErrorCode.INTERNAL_SERVER_ERROR, message, path=path)
 
 
 async def _send_response(send: Send, status: int, body: str) -> None:
@@ -662,9 +703,11 @@ async def _serve_subscription(
     """
     path = procedure.path
 
-    async def fail(message: str, code: TRPCErrorCode) -> None:
+    async def fail(message: str, code: TRPCErrorCode, data: Any | None = None) -> None:
         """Emit `serialized-error` with the flat v11 error shape, then end."""
-        await _send_sse_body(send, SseEncoder.serialized_error(message, code.value))
+        await _send_sse_body(
+            send, SseEncoder.serialized_error(message, code.value, _envelope_data(data, path))
+        )
 
     try:
         await send(
@@ -722,7 +765,7 @@ async def _serve_subscription(
         message = error.message
         if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
             message = _PRODUCTION_INTERNAL_MESSAGE
-        await fail(message, error.code)
+        await fail(message, error.code, error_data_payload(error))
         return
     except Exception as error:  # adapter boundary: failures stream as serialized-error
         message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
@@ -779,7 +822,7 @@ async def _serve_subscription(
                 message = error.message
                 if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
                     message = _PRODUCTION_INTERNAL_MESSAGE
-                await fail(message, error.code)
+                await fail(message, error.code, error_data_payload(error))
                 return
             except Exception as error:  # generator raised mid-stream
                 message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
@@ -934,13 +977,18 @@ async def _serve_trpc(
                 )
                 return
         bad_method_results = [
-            _error_result(TRPCErrorCode.NOT_FOUND, f'No procedure found on path "{call_path}"')
+            _error_result(
+                TRPCErrorCode.NOT_FOUND,
+                f'No procedure found on path "{call_path}"',
+                path=call_path,
+            )
             if (procedure := router.procedures.get(call_path)) is None
             else _error_result(
                 TRPCErrorCode.METHOD_NOT_SUPPORTED,
                 f'Procedure "{call_path}" is a {procedure.kind.value}'
                 " and only supports "
                 + ("POST" if procedure.kind is ProcedureKind.MUTATION else "GET or POST"),
+                path=call_path,
             )
             for call_path in procedure_path.split(",")
         ]
@@ -1082,7 +1130,11 @@ async def _serve_trpc(
             # call.path has already passed the core's charset validation, so
             # echoing it mirrors the core's own NOT_FOUND messages.
             results.append(
-                _error_result(TRPCErrorCode.NOT_FOUND, f'No procedure found on path "{call.path}"')
+                _error_result(
+                    TRPCErrorCode.NOT_FOUND,
+                    f'No procedure found on path "{call.path}"',
+                    path=call.path,
+                )
             )
             continue
         if procedure.kind is ProcedureKind.MUTATION and method.upper() != "POST":
@@ -1090,6 +1142,7 @@ async def _serve_trpc(
                 _error_result(
                     TRPCErrorCode.METHOD_NOT_SUPPORTED,
                     f'Procedure "{call.path}" is a mutation and only supports POST',
+                    path=call.path,
                 )
             )
             continue
@@ -1102,6 +1155,7 @@ async def _serve_trpc(
                     _error_result(
                         TRPCErrorCode.METHOD_NOT_SUPPORTED,
                         f'Procedure "{call.path}" is a subscription and only supports GET or POST',
+                        path=call.path,
                     )
                 )
             else:
@@ -1109,6 +1163,7 @@ async def _serve_trpc(
                     _error_result(
                         TRPCErrorCode.BAD_REQUEST,
                         "Cannot batch subscription calls",
+                        path=call.path,
                     )
                 )
             continue

@@ -103,7 +103,7 @@ def test_procedure_type_is_exported_and_typed() -> None:
     assert_type(procedure.handler, Callable[..., Any])
     assert_type(procedure.input_annotation, Any)
     assert_type(procedure.output_annotation, Any)
-    assert_type(procedure.errors, tuple[type[Exception], ...])
+    assert_type(procedure.errors, tuple[type[TRPCError], ...])
     assert_type(router.procedures, Mapping[str, Procedure])
 
 

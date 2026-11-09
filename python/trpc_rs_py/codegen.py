@@ -63,6 +63,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, PlainSerializer, RootModel, SerializeAsAny, WrapSerializer
 
+from .errors import http_status_for, validate_error_class
 from .router import (
     Procedure,
     ProcedureKind,
@@ -204,6 +205,7 @@ _AWAITABLE_ORIGINS = (Awaitable, Coroutine)
 _RESERVED = frozenset(
     {
         "AppRouter",
+        "AppRouterErrorShape",
         "AppRouterRecord",
         "AppRouterRootTypes",
         "DefaultErrorShape",
@@ -214,6 +216,8 @@ _RESERVED = frozenset(
         "RouterInputs",
         "RouterOutputs",
         "SubscriptionProcedure",
+        "TRPCErrorShape",
+        "TRPC_ERROR_CODE_KEY",
         # Inference helpers imported by non-empty generated routers.
         "inferRouterInputs",
         "inferRouterOutputs",
@@ -239,7 +243,7 @@ _ROOT_TYPES = """\
 export type AppRouterRootTypes = {
   ctx: object;
   meta: object;
-  errorShape: DefaultErrorShape;
+  errorShape: ERROR_SHAPE;
   // The Python server sends plain JSON (identity transformer), so the client
   // sees exactly the JSON-serialized values described here.
   transformer: false;
@@ -1458,11 +1462,78 @@ def _emit_record(
     return lines
 
 
+def _declared_error_triples(
+    procedure: Procedure, where: str
+) -> list[tuple[str, int, type[BaseModel] | None]]:
+    """Extract `(code_name, http_status, data_model)` per declared error class.
+
+    Args:
+        procedure: The procedure whose `errors` tuple is read.
+        where: Human-readable location used in error messages.
+
+    Returns:
+        One triple per class in `procedure.errors`, in declaration order.
+
+    Raises:
+        TypeError: If a class has a non-`TRPCErrorCode` `code` or a
+            `data_model` that is not a Pydantic model.
+    """
+    triples: list[tuple[str, int, type[BaseModel] | None]] = []
+    for error_type in procedure.errors:
+        try:
+            checked = validate_error_class(error_type)
+        except TypeError as error:
+            raise TypeError(f"{where}: {error}") from error
+        model = checked.data_model
+        triples.append((checked.code.value, http_status_for(checked.code), model))
+    return triples
+
+
+def _error_union_members(
+    generator: _Generator,
+    declared: list[tuple[str, int, type[BaseModel] | None]],
+    where: str,
+) -> list[str]:
+    """Render the `errorShape` union members for declared error triples.
+
+    The first member is the default shape with every declared code excluded
+    via `Exclude`, so `switch (error.data.code)` narrows to exactly one
+    declared member per code (ADR 0009).
+
+    Args:
+        generator: The name/model registry (data models are registered here).
+        declared: `(code_name, http_status, data_model)` triples.
+        where: Human-readable location used in error messages.
+
+    Returns:
+        Union member texts; empty when `declared` is empty.
+    """
+    if not declared:
+        return []
+    excluded = " | ".join(json.dumps(name) for name in dict.fromkeys(n for n, _, _ in declared))
+    members = [
+        "TRPCErrorShape<{"
+        f"code: Exclude<TRPC_ERROR_CODE_KEY, {excluded}>; "
+        "httpStatus: number; path?: string; stack?: string;"
+        "}>"
+    ]
+    for code_name, http_status, model in declared:
+        base = (
+            f"code: {json.dumps(code_name)}; httpStatus: {http_status}; "
+            "path?: string; stack?: string;"
+        )
+        data_ref = generator._register_model(model, where) if model is not None else None
+        member = f"TRPCErrorShape<{{{base}}}" + (f" & {data_ref}>" if data_ref else ">")
+        members.append(member)
+    return members
+
+
 def _emit_procedure_interface(
     procedure: Procedure,
     name: str,
     input_type: str | None,
     output_type: str,
+    error_shape: str = "DefaultErrorShape",
 ) -> list[str]:
     """Render one procedure's interface declaration.
 
@@ -1471,6 +1542,8 @@ def _emit_procedure_interface(
         name: The assigned TypeScript interface name.
         input_type: Input type text, or `None` for no-input procedures.
         output_type: Output type text.
+        error_shape: The `errorShape` type text — a declared-error union,
+            `AppRouterErrorShape`, or `DefaultErrorShape`.
 
     Returns:
         The interface's source lines.
@@ -1500,16 +1573,18 @@ def _emit_procedure_interface(
         "    meta: unknown;",
         f"    input: {input_text};",
         f"    output: {output_type};",
-        "    errorShape: DefaultErrorShape;",
+        f"    errorShape: {error_shape};",
         "  }> {}",
     ]
 
 
-def _imports(flat: list[tuple[str, Procedure]]) -> str:
+def _imports(flat: list[tuple[str, Procedure]], has_errors: bool = False) -> str:
     """Build the type-import block, including only the names actually used.
 
     Args:
         flat: The `(path, procedure)` pairs from `_flatten`.
+        has_errors: Whether any procedure declares `errors=[...]` — then the
+            emitted unions need `TRPCErrorShape` and `TRPC_ERROR_CODE_KEY`.
 
     Returns:
         The import statement text.
@@ -1522,6 +1597,8 @@ def _imports(flat: list[tuple[str, Procedure]]) -> str:
         ```
     """
     names = ["DefaultErrorShape", "Router"]
+    if has_errors:
+        names.extend(["TRPCErrorShape", "TRPC_ERROR_CODE_KEY"])
     if any(procedure.kind is ProcedureKind.QUERY for _, procedure in flat):
         names.append("QueryProcedure")
     if any(procedure.kind is ProcedureKind.MUTATION for _, procedure in flat):
@@ -1579,6 +1656,19 @@ def generate_types(router: Router) -> str:
     # re-key procedures without rewriting their stored path.
     names = {path: _procedure_name(generator, path) for path, _ in flat}
 
+    # Collect every declared error once so the router-level union and the
+    # per-procedure `errorShape` fields share one member table. Same
+    # `(code, model)` pairs dedupe to a single union member.
+    per_procedure_errors: dict[str, list[tuple[str, int, type[BaseModel] | None]]] = {}
+    all_declared: list[tuple[str, int, type[BaseModel] | None]] = []
+    for path, procedure in flat:
+        triples = _declared_error_triples(procedure, path)
+        per_procedure_errors[path] = triples
+        for triple in triples:
+            if triple not in all_declared:
+                all_declared.append(triple)
+    has_errors = bool(all_declared)
+
     interfaces: list[str] = []
     for path, procedure in flat:
         hints = type_hints_of(procedure.handler)
@@ -1586,11 +1676,39 @@ def generate_types(router: Router) -> str:
             generator, path, procedure.kind, procedure.handler, hints, "    "
         )
         output_type = _output_type(generator, path, procedure.kind, hints)
+        triples = per_procedure_errors[path]
+        if triples:
+            # Declared procedures get a restricted union: the default shape
+            # minus their declared codes, plus one member per declared error.
+            error_shape = " | ".join(_error_union_members(generator, triples, path))
+        elif has_errors:
+            # Undeclared procedures fall back to the router-wide union — the
+            # same shape a Node app with a global errorFormatter produces.
+            error_shape = "AppRouterErrorShape"
+        else:
+            error_shape = "DefaultErrorShape"
         interfaces.append(
-            "\n".join(_emit_procedure_interface(procedure, names[path], input_type, output_type))
+            "\n".join(
+                _emit_procedure_interface(
+                    procedure, names[path], input_type, output_type, error_shape
+                )
+            )
         )
 
-    sections: list[str] = [_HEADER, _imports(flat), _ROOT_TYPES]
+    sections: list[str] = [
+        _HEADER,
+        _imports(flat, has_errors),
+        _ROOT_TYPES.replace(
+            "ERROR_SHAPE", "AppRouterErrorShape" if has_errors else "DefaultErrorShape"
+        ),
+    ]
+    if has_errors:
+        union_lines = ["export type AppRouterErrorShape ="]
+        union_lines.extend(
+            f"  | {member}" for member in _error_union_members(generator, all_declared, "AppRouter")
+        )
+        union_lines[-1] += ";"
+        sections.append("\n".join(union_lines))
     for name, lines in generator.model_sources:
         if lines:
             sections.append(f"export interface {name} {{\n" + "\n".join(lines) + "\n}")

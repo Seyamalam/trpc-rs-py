@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Typed errors (ADR 0009): procedures declare `errors=[PostNotFound,
+  RateLimited]` — `TRPCError` subclasses with a `code` class attribute and an
+  optional Pydantic `data_model`. Declared payloads merge into `error.data`
+  on the wire (same shape as a Node `errorFormatter`), and generated
+  TypeScript emits `AppRouterErrorShape` — a discriminated union over
+  `error.data.code` with per-code model fields, verified end-to-end against
+  `TRPCClientError<AppRouter>` narrowing. Reserved keys (`code`,
+  `httpStatus`, `path`, `stack`) cannot be overridden. Propagation covers
+  JSON envelopes, SSE `serialized-error` frames, and REST error bodies.
+- `error.data.path` on procedure-level error envelopes, matching the
+  official `getErrorShape` (previously absent).
+- `validate_error_class` public helper; `error_data_payload` payload
+  extraction shared by the ASGI adapter, SSE frames, and REST.
+
+### Fixed
+
+- Error-code table now mirrors all 21 official tRPC v11 codes
+  (`@trpc/server` 11.25.0), adding `NOT_IMPLEMENTED`, `BAD_GATEWAY`,
+  `SERVICE_UNAVAILABLE`, `GATEWAY_TIMEOUT`, `PAYMENT_REQUIRED`,
+  `UNSUPPORTED_MEDIA_TYPE`, `UNPROCESSABLE_CONTENT`, `PRECONDITION_REQUIRED`,
+  and `TOO_MANY_REQUESTS` — and correcting three wrong data codes:
+  `BAD_REQUEST` -33600→-32600, `PAYLOAD_TOO_LARGE` -32007→-32013,
+  `CLIENT_CLOSED_REQUEST` -32012→-32099.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

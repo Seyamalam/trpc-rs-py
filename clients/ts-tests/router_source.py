@@ -24,7 +24,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from trpc_rs_py import Router, Tracked, tracked
+from trpc_rs_py import Router, TRPCError, TRPCErrorCode, Tracked, tracked
 
 
 class Color(enum.Enum):
@@ -200,6 +200,32 @@ class WireAlias(BaseModel):
     value: str = Field(alias="wire_value")
 
 
+class PostRef(BaseModel):
+    """Typed payload of `PostNotFound`: which post id was missing."""
+
+    post_id: int
+
+
+class RateLimitInfo(BaseModel):
+    """Typed payload of `RateLimited`: seconds until retry is allowed."""
+
+    retry_after: float
+
+
+class PostNotFound(TRPCError):
+    """Declared typed error: the post does not exist."""
+
+    code = TRPCErrorCode.NOT_FOUND
+    data_model = PostRef
+
+
+class RateLimited(TRPCError):
+    """Declared typed error: the caller was rate limited."""
+
+    code = TRPCErrorCode.TOO_MANY_REQUESTS
+    data_model = RateLimitInfo
+
+
 def build_router() -> Router:
     """Build the representative router for the TypeScript fixture.
 
@@ -224,6 +250,12 @@ def build_router() -> Router:
     def post_by_id(post_id: int) -> Post:
         """Single-annotated-parameter query returning a nested model."""
         raise NotImplementedError
+
+    @router.query(errors=[PostNotFound, RateLimited])
+    def post_by_id_or_fail(post_id: int) -> Post:
+        """Query with declared typed errors — `error.data.code` narrows to a
+        discriminated union carrying `PostRef`/`RateLimitInfo` payloads."""
+        raise PostNotFound("missing", data=PostRef(post_id=post_id))
 
     @router.mutation
     def create_post(post: Post, author: Author, source: Literal["web", "app"] = "web") -> Post:

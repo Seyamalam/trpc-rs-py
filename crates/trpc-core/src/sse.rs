@@ -84,13 +84,19 @@ pub fn encode_frame(
 /// The flat tRPC v11 error object (the `error` member of the error envelope).
 #[must_use]
 pub fn error_shape(error: &TrpcError) -> json::Value {
+    let mut data = error.extra.clone().unwrap_or_default();
+    data.insert(
+        "code".to_owned(),
+        json::Value::String(error.code_name.clone()),
+    );
+    data.insert(
+        "httpStatus".to_owned(),
+        json::Value::Number(error.http_status.into()),
+    );
     json::json!({
         "message": error.message,
         "code": error.data_code,
-        "data": {
-            "code": error.code_name,
-            "httpStatus": error.http_status
-        }
+        "data": json::Value::Object(data)
     })
 }
 

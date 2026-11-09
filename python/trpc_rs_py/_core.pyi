@@ -63,7 +63,12 @@ class CallResult:
     def ok(data: Any) -> CallResult: ...
     @staticmethod
     def error(
-        message: str, code: str, data_code: int, http_status: int, code_name: str
+        message: str,
+        code: str,
+        data_code: int,
+        http_status: int,
+        code_name: str,
+        data: Any | None = None,
     ) -> CallResult: ...
 
 def parse_request(
@@ -93,7 +98,7 @@ class SseEncoder:
     def close() -> bytes: ...
     def data(self, value: Any, id: str | None = None) -> bytes: ...
     @staticmethod
-    def serialized_error(message: str, code_name: str) -> bytes: ...
+    def serialized_error(message: str, code_name: str, data: Any | None = None) -> bytes: ...
 
 @final
 class Watcher:
