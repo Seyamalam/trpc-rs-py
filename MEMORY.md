@@ -6,10 +6,10 @@
 ## Current version and milestone
 
 - Version: **0.3.0 released** (`v0.3.0` tag pushed, wheel in `target/wheels/`);
-  milestone **0.3.0 Launch version** — complete, awaiting user publish + feedback.
+  milestone **0.4.0 Node-migration + typed errors** — in progress.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- Roadmap: 0.2.0 Core on FastAPI (done) → 0.3.0 Launch version (done) → **STOP;
-  ask user to publish + report feedback** → 0.4.0+ per user-approved plan.
+- Roadmap: 0.2.0 (done) → 0.3.0 (done) → **0.4.0: migration link, Zod codegen,
+  typed errors, migrate-from-node demo** (user approved via "continue").
 
 ## What is done
 
@@ -257,10 +257,18 @@
    live), `trpc-py init` Next.js+FastAPI template, `ai-chat`/`live-types`
    examples, `docs/launch/` materials, 0.3.0 benchmark run, and a
    SIGINT-responsiveness fix in the dev watcher loop.
-2. **Launch handoff (MISSION §19):** user publishes the release + draft
-   announcement (`docs/launch/announcement.md`), collects feedback, then we
-   update MEMORY and re-prioritize the roadmap together. Do not start 0.4.0
-   work until the user approves a revised plan.
+2. **Launch handoff (MISSION §19):** user publishes the 0.3.0 release + draft
+   announcement (`docs/launch/announcement.md`) and reports feedback.
+   (0.4.0 proceeded anyway on an explicit "continue".)
+3. **0.4.0 in progress.** Done: ADR 0008 (node migration link) + ADR 0009
+   (typed errors) `1f0dc87`; typed errors + wire-table fix `6572c0a` —
+   `errors=[...]` declarations, `TRPCError` subclass `code`/`data_model`,
+   payload merge into `error.data` with reserved-key immunity across
+   JSON/SSE/REST, `data.path` on procedure envelopes, full 21-code official
+   table (3 wrong data codes fixed), `AppRouterErrorShape` discriminated
+   union verified against `TRPCClientError<AppRouter>` live. Remaining:
+   `trpc-py codegen zod`, `@trpc-rs-py/link` npm package,
+   `examples/migrate-from-node`, docs/MEMORY sync, benchmarks, release.
 
 ## Open questions
 
