@@ -15,6 +15,7 @@ nav:
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md
   - Typed errors: typed-errors.md
+  - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md
   - CLI reference: cli.md
   - Benchmarks: benchmarks.md

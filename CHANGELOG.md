@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   official `getErrorShape` (previously absent).
 - `validate_error_class` public helper; `error_data_payload` payload
   extraction shared by the ASGI adapter, SSE frames, and REST.
+- `@trpc-rs-py/link` npm package (ADR 0008): `migrationLink` routes
+  operations to Python when the path is under the `py.` prefix or in an
+  explicit `procedures` list — subscriptions included (SSE, no Node hop) —
+  and `MergedAppRouter<TNode, TPy>` deep-merges the Node and generated
+  Python router records with Python winning conflicts and `errorShape`
+  widened to a union. Paths are never rewritten.
+- `examples/migrate-from-node`: a real Node `@trpc/server` app, a FastAPI
+  app holding the moved procedures (`posts.byId` at its original path,
+  `py.posts_search` under the prefix), and a merged `createTRPCClient`
+  smoke-tested end to end over real HTTP.
 
 ### Fixed
 

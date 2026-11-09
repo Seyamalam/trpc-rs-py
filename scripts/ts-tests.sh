@@ -91,3 +91,10 @@ PY
 # Runtime compatibility: spawns the FastAPI/Starlette fixture servers and runs
 # the official @trpc/client v11 against them over real HTTP.
 pnpm test
+
+# The migration-link package has its own pnpm project and node:test suite.
+cd ../../packages/link
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm typecheck
+pnpm test
