@@ -5,7 +5,7 @@ them from your TypeScript app with the official `@trpc/client` — with full
 end-to-end types that update live as you edit Python.
 
 ```python
-# FastAPI (or Starlette, Flask, Django)
+# FastAPI — any ASGI framework works; Flask and Django adapters are planned
 from trpc_rs_py import Router
 
 router = Router()
@@ -40,7 +40,8 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
   LLM tokens).
 - **No lock-in** — the same router can serve REST + an OpenAPI 3.1 document.
 - **Fast** — request parsing, routing, batching, and serialization run in a
-  Rust core; the Python adapter adds near-zero overhead over a plain JSON view.
+  Rust core; the Python adapter adds near-zero overhead over a plain JSON view
+  ([benchmark results](docs/benchmarks.md)).
 
 ## Development
 

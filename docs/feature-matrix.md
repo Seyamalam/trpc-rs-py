@@ -33,4 +33,4 @@ standalone server, official `@trpc/server`, FastAPI + OpenAPI codegen.
 | OpenAPI/REST output | planned | planned | planned | planned | planned | planned | not supported | supported |
 | Playground | planned | planned | planned | planned | planned | planned | not supported | not supported |
 | Node migration link | planned | planned | planned | planned | planned | planned | supported | not supported |
-| Python client | supported | supported | supported | supported | supported | supported | not supported | not supported |
+| Python client | planned | planned | planned | planned | planned | planned | not supported | supported |
