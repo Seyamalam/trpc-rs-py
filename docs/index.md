@@ -10,8 +10,10 @@ so the adapter adds near-zero overhead over a plain JSON endpoint.
 
 The project is at version 0.1.0 (foundation milestone). See
 [MEMORY.md](https://github.com/Seyamalam/trpc-rs-py/blob/main/MEMORY.md) for
-what is done and what comes next, and the
-[feature matrix](feature-matrix.md) for feature status per adapter.
+what is done and what comes next, the
+[feature matrix](feature-matrix.md) for feature status per adapter, and the
+[wire protocol](protocol.md) page for the exact tRPC v11 wire format and its
+runtime verification against the official client.
 
 ## TypeScript types from your Python router
 

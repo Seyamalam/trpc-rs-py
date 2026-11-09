@@ -12,6 +12,7 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Wire Protocol: protocol.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md
   - TypeScript Codegen: codegen.md
