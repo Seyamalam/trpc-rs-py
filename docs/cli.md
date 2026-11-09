@@ -28,6 +28,20 @@ trpc-py dev --app server:router --out web/router.d.ts
 Import and type errors print the traceback and keep the last good output.
 `dev` refuses to run when `TRPC_RS_PY_PRODUCTION` is set.
 
+## `trpc-py init`
+
+Scaffold a starter project from a bundled template:
+
+```bash
+trpc-py init my-app            # creates ./my-app
+trpc-py init my-app --dir app  # or an explicit directory
+```
+
+`nextjs-fastapi` (the default and only template today) lays down a FastAPI
+server with tRPC + REST mounts and a minimal Next.js app wired to the
+official `@trpc/client` — see the generated `README.md` for run steps. The
+target directory must be empty.
+
 ## `trpc-py codegen ts`
 
 One-off declaration generation, same `--app`/`--out` contract:

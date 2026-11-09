@@ -252,3 +252,38 @@ def untyped(x):
 
     with redirect_stderr(io.StringIO()):
         assert cli_main(["check", "--app", "router_mod_untyped:router"]) == 1
+
+
+def test_cli_init_scaffolds_template(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    target = tmp_path / "my-app"
+    assert cli_main(["init", "my-app", "--dir", str(target)]) == 0
+    server = (target / "server.py").read_text()
+    assert "my-app" in server
+    assert "router = Router()" in server
+    import ast
+
+    ast.parse(server)  # the scaffolded server is valid Python
+    package_json = (target / "web" / "package.json").read_text()
+    assert "my-app-web" in package_json
+    assert (target / "web" / "app-router.d.ts").exists()
+    assert (target / "README.md").exists()
+    capsys.readouterr()
+
+
+def test_cli_init_refuses_non_empty_dir(tmp_path: Path) -> None:
+    target = tmp_path / "taken"
+    target.mkdir()
+    (target / "existing.txt").write_text("x")
+    import io
+    from contextlib import redirect_stderr
+
+    with redirect_stderr(io.StringIO()):
+        assert cli_main(["init", "taken", "--dir", str(target)]) == 1
+
+
+def test_cli_init_rejects_bad_name(tmp_path: Path) -> None:
+    import io
+    from contextlib import redirect_stderr
+
+    with redirect_stderr(io.StringIO()):
+        assert cli_main(["init", "../escape", "--dir", str(tmp_path / "x")]) == 1

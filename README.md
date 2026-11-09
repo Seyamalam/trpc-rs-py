@@ -33,11 +33,23 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 ```
 
 > **Status: 0.2.0 released; 0.3.0 in development.** Queries, mutations,
-> batching, and SSE subscriptions are wire-compatible with the official
-> `@trpc/client` v11 (verified live against FastAPI and Starlette). The
-> launch version adds live type sync, OpenAPI output, and starter templates.
-> See [`MISSION.md`](MISSION.md) for the full roadmap and
-> [`docs/feature-matrix.md`](docs/feature-matrix.md) for feature status.
+> batching, SSE subscriptions, live type sync (`trpc-py dev`), REST +
+> OpenAPI output, and starter templates (`trpc-py init`) are in; the 0.3.0
+> launch adds AI streaming helpers and examples. See [`MISSION.md`](MISSION.md)
+> for the full roadmap and [`docs/feature-matrix.md`](docs/feature-matrix.md)
+> for feature status.
+
+## Quickstart
+
+```sh
+pip install trpc-rs-py fastapi uvicorn
+trpc-py init my-app && cd my-app
+uvicorn server:app --reload &
+trpc-py dev --app server:router --out web/app-router.d.ts
+```
+
+Then `cd web && npm install && npm run dev` — the Next.js app calls Python
+with full types that update live on every Python save.
 
 ## Why this exists
 

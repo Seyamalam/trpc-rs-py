@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the documented `app.openapi` customization point.
 - `trpc-py codegen openapi --app <module:attr> --out openapi.json` writes the
   document from the CLI.
+- `trpc-py init <name>` scaffolds a Next.js + FastAPI starter (bundled
+  `nextjs-fastapi` template): a server with tRPC + REST mounts, a typed
+  `@trpc/client` Next.js app, and a generated `app-router.d.ts`.
 
 ## [0.2.0] - 2026-11-09
 

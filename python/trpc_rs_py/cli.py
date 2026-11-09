@@ -5,7 +5,9 @@ exit codes, and `--json` output are the stable contract; the implementation
 language may move to `clap` when the standalone server ships. Commands:
 
 * `dev` — live type sync: watch Python sources, regenerate `.d.ts` on save.
+* `init` — scaffold a starter project (Next.js + FastAPI).
 * `codegen ts` — one-off TypeScript declaration generation.
+* `codegen openapi` — one-off OpenAPI 3.1 document generation.
 * `routes` — list procedures with kinds and signatures.
 * `check` — validate that a router generates cleanly.
 * `doctor` — environment info for bug reports.
@@ -23,9 +25,27 @@ from typing import TYPE_CHECKING
 from ._dev_loader import load_app_object
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
+    from typing import Protocol
 
     from .router import Router
+
+    class _TemplateNode(Protocol):
+        """Structural subset of `importlib.resources.abc.Traversable`.
+
+        Declared locally because `importlib.resources.abc` ships no stubs on
+        this interpreter; `importlib.resources.files()` results satisfy it.
+        """
+
+        @property
+        def name(self) -> str: ...
+
+        def is_dir(self) -> bool: ...
+
+        def iterdir(self) -> Iterator[_TemplateNode]: ...
+
+        def read_bytes(self) -> bytes: ...
+
 
 __all__ = ["build_parser", "main"]
 
@@ -98,6 +118,60 @@ def _cmd_codegen_openapi(args: argparse.Namespace) -> int:
     out.write_text(json.dumps(document, indent=2) + "\n")
     print(f"trpc-py codegen: wrote {out}")
     return 0
+
+
+_TEMPLATES = ("nextjs-fastapi",)
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    """Handle `trpc-py init`: scaffold a starter project from a template."""
+    import re
+
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", args.name):
+        print(
+            f"trpc-py init: invalid project name {args.name!r} "
+            "(letters, digits, '-' and '_', starting with a letter or digit)",
+            file=sys.stderr,
+        )
+        return 1
+    target = Path(args.dir) if args.dir else Path(args.name)
+    if target.exists() and any(target.iterdir()):
+        print(f"trpc-py init: {target} exists and is not empty", file=sys.stderr)
+        return 1
+    try:
+        _copy_template(args.template, target, args.name)
+    except (FileNotFoundError, NotADirectoryError):
+        print(f"trpc-py init: unknown template {args.template!r}", file=sys.stderr)
+        return 1
+    print(f"trpc-py init: created {args.template} project in {target}")
+    print(f"  next: cd {target} && see README.md")
+    return 0
+
+
+def _copy_template(template: str, target: Path, name: str) -> None:
+    """Recursively copy a bundled template, substituting `{{name}}` in text.
+
+    Uses `importlib.resources` so the template tree resolves inside wheels
+    and zipped installs, not only the source checkout.
+    """
+    from importlib.resources import files
+
+    root = files("trpc_rs_py").joinpath("templates").joinpath(template)
+    _copy_traversable(root, target, name)
+
+
+def _copy_traversable(source: _TemplateNode, target: Path, name: str) -> None:
+    """Copy one traversable node (file or directory) into `target`."""
+    if source.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+        for child in source.iterdir():
+            _copy_traversable(child, target / child.name, name)
+        return
+    data = source.read_bytes()
+    try:
+        target.write_text(data.decode("utf-8").replace("{{name}}", name))
+    except UnicodeDecodeError:
+        target.write_bytes(data)
 
 
 def _signature_line(handler: object) -> str:
@@ -244,6 +318,17 @@ def build_parser() -> argparse.ArgumentParser:
     codegen_openapi.add_argument("--title", default=None, help="info.title override")
     codegen_openapi.add_argument("--version", default=None, help="info.version override")
     codegen_openapi.set_defaults(handler=_cmd_codegen_openapi)
+
+    init = subcommands.add_parser("init", help="scaffold a starter project")
+    init.add_argument("name", help="project name (also the default directory)")
+    init.add_argument("--dir", default=None, help="target directory (default: ./<name>)")
+    init.add_argument(
+        "--template",
+        choices=_TEMPLATES,
+        default="nextjs-fastapi",
+        help="starter template (default: nextjs-fastapi)",
+    )
+    init.set_defaults(handler=_cmd_init)
 
     routes = subcommands.add_parser("routes", help="list all procedures")
     routes.add_argument("--app", required=True, help="router import string (module:attribute)")
