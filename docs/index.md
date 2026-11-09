@@ -13,6 +13,15 @@ The project is at version 0.1.0 (foundation milestone). See
 what is done and what comes next, and the
 [feature matrix](feature-matrix.md) for feature status per adapter.
 
+## TypeScript types from your Python router
+
+`generate_types(router)` emits an `AppRouter` declaration file that the
+official `@trpc/client` v11 consumes directly: literal procedure paths, exact
+input/output types from Python annotations and Pydantic v2 models, and a hard
+`TypeError` instead of `any` for anything unmappable. See
+[TypeScript codegen](codegen.md) for the usage, the type-mapping table, and
+the tested limits.
+
 ## Why not FastAPI + OpenAPI codegen?
 
 Planned comparison — see the roadmap in `MISSION.md` section 2 and

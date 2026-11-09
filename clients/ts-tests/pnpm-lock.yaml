@@ -10,6 +10,9 @@ importers:
       "@trpc/client":
         specifier: ^11.0.0
         version: 11.25.0(@trpc/server@11.25.0(typescript@5.9.3))(typescript@5.9.3)
+      "@trpc/server":
+        specifier: 11.25.0
+        version: 11.25.0(typescript@5.9.3)
       prettier:
         specifier: ^3.3.0
         version: 3.9.10

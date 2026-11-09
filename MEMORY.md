@@ -84,10 +84,95 @@
   GLM 5.3 Flash review endpoint repeatedly failed (502); user authorized
   same-model GPT 6 Luna review. Independence is weaker than the preferred
   cross-model review; this deviation is recorded transparently.
-- Next: task F — `trpc-py codegen ts` (AppRouter .d.ts), implementer GLM 5.3
-  Flash if available (otherwise GPT 6 Luna per explicit user authorization
-  may be requested); then task G — official `@trpc/client` compatibility
-  tests + fastapi-basic example; then 0.2.0 bump + first benchmark run.
+- Task F done (this commit): `generate_types(router) -> str` in
+  `python/trpc_rs_py/codegen.py`, exported from the package root, emitting a
+  `.d.ts` AppRouter the official `@trpc/client` v11 consumes. Type strategy
+  verified against the installed packages: procedure interfaces extend
+  official `QueryProcedure`/`MutationProcedure`, `AppRouter` extends official
+  `Router<RootTypes, Record>` from `@trpc/server/unstable-core-do-not-import`
+  (the officially documented inference import), records are nested type
+  aliases, root types declare `transformer: false` (identity JSON) +
+  `DefaultErrorShape`. Type mapping: primitives, unions/Optional, Literal,
+  Enum (value literal unions), list/Sequence/set/frozenset, fixed + variadic
+  tuples, string-keyed dict/Mapping, datetime/date/time/UUID → string,
+  Pydantic v2 models (nested, recursive, defaults → `?`, validation-only
+  Annotated metadata). Runtime-backed alias handling emits a shared key only
+  when accepted at input and emitted at output; asymmetric aliases and
+  AliasPath/AliasChoices fail clearly. RootModel, custom serializers/encoders,
+  computed/excluded fields, extra=allow, non-ISO temporal settings, and
+  Annotated serializer metadata fail instead of producing an inaccurate type.
+  Hard `TypeError` naming procedure+annotation for unsupported types; never
+  emits `any`. Deterministic; TS keywords, globals, generated imports sanitized
+  with collision handling; keys JSON-quoted (injection-safe). Verified by the
+  codegen test suite + committed TS fixture: `tsc --noEmit` with official
+  `@trpc/client` 11.25.0 passes exact types and load-bearing `@ts-expect-error`
+  negatives (control: removing a directive makes tsc fail). `@trpc/server@11.25.0` added as a
+  pinned devDependency of ts-tests only (not a runtime dep of the Python
+  package). `trpc-py codegen ts` CLI deferred to the 0.6.0 Rust CLI milestone
+  per MISSION §8 (no CLI exists yet; nothing faked). Docs: docs/codegen.md,
+  index/nav, feature matrix TS codegen row = supported for FastAPI/
+  Starlette with test links. 152 Python tests total. GPT 6 Luna review round
+  1: REQUEST_CHANGES (3 findings) — alias contract mismatch (codegen emitted
+  field-name types while runtime input takes the alias), missing TS
+  reserved-word sanitization, stale test count in this file; all three fixed
+  and verified with `just ci`. Review round 2 (GPT 6 Luna): REQUEST_CHANGES
+  (3 findings), all fixed and verified with `just ci`: (1) alias resolution
+  now models the full runtime Pydantic config — input keys come from
+  `validation_alias`/`alias` plus the field name under `populate_by_name`,
+  output keys from `serialization_alias`/`alias` under `serialize_by_alias`
+  (verified empirically against the runtime's `TypeAdapter.dump_python` path);
+  asymmetric input/output wire names are rejected with both names in the
+  message, `AliasPath`/`AliasChoices` validation aliases are always rejected,
+  and a symmetric `serialize_by_alias` alias is emitted using the alias as
+  the property key; (2) `Field(exclude=True)` fields are rejected (the
+  runtime omits them from serialized output, so the interface would declare a
+  property that is never sent); (3) `never` and `undefined` added to the
+  reserved-word set (tsc TS2427 rejects them as interface names), keyword
+  models + a symmetric `serialize_by_alias` model added to the ts-tests
+  fixture, d.ts regenerated, `tsc --noEmit` green with new positive cases;
+  docs/codegen.md alias rules rewritten to match. Review round 3 (GPT 6
+  Luna): REQUEST_CHANGES (4 findings), all fixed and verified with `just ci`:
+  (1) alias resolution now reads the model's effective Pydantic config flags —
+  `validate_by_alias` (default True) and `validate_by_name` (default False,
+  falling back to legacy `populate_by_name`), verified empirically against
+  the installed Pydantic 2.14.3 nested-model validation (`validate_by_alias`
+  is not merely "always on": `validate_by_alias=False, validate_by_name=True,
+  serialize_by_alias=True` accepts only the field name at input while output
+  emits the alias, and the generator now rejects that instead of emitting the
+  alias); a matrix test probes accepted/rejected input keys and emitted
+  output keys through `build_input_validator`/`build_output_validator` and
+  asserts the generator agrees for 11 alias configurations; (2) shape-changing
+  serialization features are rejected: `RootModel` (bare scalar wire shape),
+  `@field_serializer`/`@model_serializer` (including inherited ones via
+  `__pydantic_decorators__`, which aggregates the MRO), `@computed_field`
+  (output-only property), and `Field(exclude_if=...)` (exists in 2.14.3;
+  conditionally omits output); each rejection backed by a test that first
+  shows the runtime wire effect via `TypeAdapter.dump_python`; (3) the
+  TypeScript reserved-name set now also covers the built-in generics the
+  generated annotations use (`Array`, `Record`, `ReadonlyArray`, ...) plus
+  common utility types (`Partial`, `Pick`, `Omit`, `NonNullable`,
+  `ReturnType`, ...) and type-context keyword tokens (`keyof`, `infer`,
+  `readonly`, `unique`, `is`, `asserts`, `satisfies`, `using`, `accessor`) —
+  shadowing `Array`/`Record` would silently capture every emitted
+  `Array<T>`/`Record<K, V>`; models named `Array`/`Record`/`infer`/`keyof`/
+  `readonly`/`unique` added to the ts-tests fixture (with a real `_Array`
+  collision test → `_Array_2`), d.ts regenerated, `tsc --noEmit` green;
+  (4) docs/codegen.md alias section and hard-failure list rewritten to the
+  exact supported/rejected cases (not "all serialization aliases rejected").
+  Review round 4 (GPT 6 Luna) found serializer metadata/config, extra=allow,
+  and generated-helper name shadowing gaps. Orchestrator fixes: reject
+  Annotated PlainSerializer/WrapSerializer/SerializeAsAny, nonempty
+  json_encoders, non-ISO ser_json_temporal for temporal fields, and
+  extra=allow; reserve inferRouterInputs/inferRouterOutputs; add runtime-backed
+  tests and TS fixture. Final round-4 review by GPT-6 Luna APPROVE (cross-
+  model); no blocking findings. `just ci` passed; 173 Python tests.
+  Additional runtime-backed tests pin Annotated PlainSerializer output
+  (int→string), SerializeAsAny subclass fields, model json_encoders,
+  ser_json_temporal seconds output (datetime→number), extra=allow preserving
+  unknown fields, and model names colliding with inference-helper imports.
+  Docs now list these new hard-failure cases.
+- Next: task G — official `@trpc/client` compatibility tests + fastapi-basic
+  example; then 0.2.0 bump + first benchmark run.
 
 ## What was in progress (superseded)
 
@@ -102,8 +187,8 @@
 2. **0.2.0 Core on FastAPI progress:** tasks A–E complete (Rust protocol,
    Python Router/errors, PyO3 batch boundary, ASGI adapter, Pydantic v2
    validation); all changes committed/pushed after review + gates. Remaining:
-   a. Task F: `trpc-py codegen ts` emitting AppRouter .d.ts from the Python
-      Router, with typing tests.
+   a. Task F: `generate_types` AppRouter .d.ts codegen — DONE (this commit;
+      CLI deferred to 0.6.0 Rust CLI milestone, recorded in docs/codegen.md).
    b. Task G: official @trpc/client v11 compatibility tests against FastAPI/
       Starlette for queries, mutations, batching and errors; add fastapi-basic
       example with README + smoke test.
