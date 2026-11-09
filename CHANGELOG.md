@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
+### Added
+
+- tRPC v11 protocol core in Rust: query/mutation parsing, batching, result
+  and error envelopes, request limits (body size, batch size, JSON depth),
+  allocation-free router lookup (`crates/trpc-core`).
+- Python `Router` / `@router.query` / `@router.mutation` API with merge and
+  nest, and `TRPCError` with the official code table.
+- PyO3 whole-batch FFI boundary (`parse_request`, `build_response`,
+  `CallResult`) with the GIL released during parse and serialize.
+- ASGI adapter: `mount()` sub-app and `attach()` middleware for FastAPI and
+  Starlette, body-size enforcement, disconnect handling, production error
+  redaction, sync handlers via worker threads.
+- Pydantic v2 input/output validation built from handler signatures.
+- `generate_types(router)` emitting an `AppRouter` `.d.ts` consumed by the
+  official `@trpc/client` v11 (verified with `tsc --noEmit`).
+- Official-client runtime compatibility suite: 28 live HTTP tests
+  (FastAPI + Starlette) covering queries, mutations, batching, errors,
+  method override and POST-only enforcement.
+- `fastapi-basic` example with README and CI smoke test.
+- `docs/protocol.md`: the exact wire format with verified deviations.
+- Benchmark suite: criterion Rust micros, pytest-benchmark adapter/codegen
+  micros, oha HTTP load vs a plain FastAPI baseline and the official Node
+  `@trpc/server` standalone adapter; SVG charts via `benchmarks/plot.py`.
+- `scripts/release.sh`: bump, changelog check, gate, wheel, tag, push.
+
+### Fixed
+
+- Error envelope now uses the official flat v11 shape
+  (`error.message`/`error.code`/`error.data`), so the official client
+  surfaces server errors with code and data instead of "Unable to
+  transform response from server".
+- Batched inputs tolerate missing index keys (the official client omits
+  undefined inputs); an all-no-input batch sends `input={}`.
+
 ## [0.1.0] - 2026-11-08
 
 ### Added

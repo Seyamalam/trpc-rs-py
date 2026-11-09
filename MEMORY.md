@@ -244,14 +244,13 @@
 1. Finish 0.1.0: benchmark harness skeleton (`benchmarks/README.md`, `plot.py`),
    git hooks installed, docs skeleton, feature matrix skeleton — done as part
    of the foundation commits.
-2. **0.2.0 Core on FastAPI progress:** tasks A–G complete (Rust protocol,
+2. **0.2.0 Core on FastAPI:** tasks A–G complete (Rust protocol,
    Python Router/errors, PyO3 batch boundary, ASGI adapter, Pydantic v2
    validation, `generate_types` codegen, official-client runtime suite +
-   fastapi-basic example). Remaining:
-   a. Commit + push the Task G / bug-fix working tree after full gate green.
-   b. Run the first benchmark suite (results JSON + plots + headline numbers).
-   c. Resolve the missing v0.1.0 tag; bump to 0.2.0, update CHANGELOG,
-      annotated tag, push.
+   fastapi-basic example). First benchmark suite run and recorded
+   (results/plots/headline numbers committed). Remaining:
+   a. Commit + push the working tree after full gate green.
+   b. Bump to 0.2.0, `chore(release): v0.2.0`, annotated tag, push.
 3. Then begin 0.3.0 launch work (live types, AI streaming, OpenAPI/REST,
    starter); stop at launch and ask user to publish/report feedback.
 
@@ -294,8 +293,16 @@
 
 ## Latest benchmark headline numbers
 
-- None yet. First full run due with milestone 0.2.0; harness skeleton in
-  `benchmarks/` (method documented in `benchmarks/README.md`).
+- **0.2.0 run** (M5 Pro, 16 conns, 5s; method + raw JSON in
+  `benchmarks/results/0.2.0/`, charts in `docs/benchmarks/`): trpc-fastapi
+  16,233 req/s single query (p99 1.35 ms) vs plain FastAPI 11,686 req/s
+  (p99 2.05 ms) — the mount is faster than a plain JSON view, ~2x on 100 KB
+  payloads (6,440 vs 3,214 req/s). Node `@trpc/server` standalone is ~2.2x
+  faster on small requests (35,634 req/s) — Python dispatch dominates, as
+  expected. Adapter micros are within noise of the baseline (~498 µs both).
+  `generate_types`: 128 µs @10, 627 µs @50, 2,520 µs @200 procedures. Rust
+  micros: route lookup 7.4 ns, single-call parse 164–228 ns.
+- SSE/streaming and live-type-sync latency benches land with 0.3.0.
 
 ## User feedback from the launch
 
