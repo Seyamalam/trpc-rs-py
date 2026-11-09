@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="450" viewBox="0 0 980 450" font-family="sans-serif">
+<rect width="980" height="450" fill="#ffffff"/>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">HTTP load — requests/sec (0.2.0)</text>
+<text x="290" y="75" font-size="13" text-anchor="end" fill="#333">batch_10 / node-trpc</text>
+<rect x="300" y="60" width="248.3" height="20" fill="#2563eb"/>
+<text x="556.3" y="75" font-size="13" fill="#111">15,136.6 req/s</text>
+<text x="290" y="105" font-size="13" text-anchor="end" fill="#333">large_payload / node-trpc</text>
+<rect x="300" y="90" width="169.9" height="20" fill="#2563eb"/>
+<text x="477.9" y="105" font-size="13" fill="#111">10,361.5 req/s</text>
+<text x="290" y="135" font-size="13" text-anchor="end" fill="#333">mutation / node-trpc</text>
+<rect x="300" y="120" width="522.7" height="20" fill="#2563eb"/>
+<text x="830.7" y="135" font-size="13" fill="#111">31,867.7 req/s</text>
+<text x="290" y="165" font-size="13" text-anchor="end" fill="#333">single_query / node-trpc</text>
+<rect x="300" y="150" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="165" font-size="13" fill="#111">32,923.3 req/s</text>
+<text x="290" y="195" font-size="13" text-anchor="end" fill="#333">batch_10 / plain-fastapi</text>
+<rect x="300" y="180" width="136.1" height="20" fill="#2563eb"/>
+<text x="444.1" y="195" font-size="13" fill="#111">8,300.8 req/s</text>
+<text x="290" y="225" font-size="13" text-anchor="end" fill="#333">large_payload / plain-fastapi</text>
+<rect x="300" y="210" width="52.0" height="20" fill="#2563eb"/>
+<text x="360.0" y="225" font-size="13" fill="#111">3,170.7 req/s</text>
+<text x="290" y="255" font-size="13" text-anchor="end" fill="#333">mutation / plain-fastapi</text>
+<rect x="300" y="240" width="118.3" height="20" fill="#2563eb"/>
+<text x="426.3" y="255" font-size="13" fill="#111">7,213.6 req/s</text>
+<text x="290" y="285" font-size="13" text-anchor="end" fill="#333">single_query / plain-fastapi</text>
+<rect x="300" y="270" width="194.9" height="20" fill="#2563eb"/>
+<text x="502.9" y="285" font-size="13" fill="#111">11,885.8 req/s</text>
+<text x="290" y="315" font-size="13" text-anchor="end" fill="#333">batch_10 / trpc-fastapi</text>
+<rect x="300" y="300" width="190.5" height="20" fill="#2563eb"/>
+<text x="498.5" y="315" font-size="13" fill="#111">11,614.5 req/s</text>
+<text x="290" y="345" font-size="13" text-anchor="end" fill="#333">large_payload / trpc-fastapi</text>
+<rect x="300" y="330" width="109.4" height="20" fill="#2563eb"/>
+<text x="417.4" y="345" font-size="13" fill="#111">6,670.0 req/s</text>
+<text x="290" y="375" font-size="13" text-anchor="end" fill="#333">mutation / trpc-fastapi</text>
+<rect x="300" y="360" width="247.9" height="20" fill="#2563eb"/>
+<text x="555.9" y="375" font-size="13" fill="#111">15,115.1 req/s</text>
+<text x="290" y="405" font-size="13" text-anchor="end" fill="#333">single_query / trpc-fastapi</text>
+<rect x="300" y="390" width="247.9" height="20" fill="#2563eb"/>
+<text x="555.9" y="405" font-size="13" fill="#111">15,114.7 req/s</text>
+</svg>

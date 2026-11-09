@@ -13,6 +13,7 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
+  - Benchmarks: benchmarks.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md
   - TypeScript Codegen: codegen.md

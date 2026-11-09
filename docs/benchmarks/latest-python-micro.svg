@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="240" viewBox="0 0 980 240" font-family="sans-serif">
+<rect width="980" height="240" fill="#ffffff"/>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Python adapter & codegen — mean µs (0.2.0)</text>
+<text x="290" y="75" font-size="13" text-anchor="end" fill="#333">trpc_query_overhead</text>
+<rect x="300" y="60" width="109.2" height="20" fill="#2563eb"/>
+<text x="417.2" y="75" font-size="13" fill="#111">509.0 µs</text>
+<text x="290" y="105" font-size="13" text-anchor="end" fill="#333">plain_json_query_baseline</text>
+<rect x="300" y="90" width="106.7" height="20" fill="#2563eb"/>
+<text x="414.7" y="105" font-size="13" fill="#111">497.4 µs</text>
+<text x="290" y="135" font-size="13" text-anchor="end" fill="#333">codegen_types[p10]</text>
+<rect x="300" y="120" width="27.7" height="20" fill="#2563eb"/>
+<text x="335.7" y="135" font-size="13" fill="#111">129.3 µs</text>
+<text x="290" y="165" font-size="13" text-anchor="end" fill="#333">codegen_types[p50]</text>
+<rect x="300" y="150" width="133.0" height="20" fill="#2563eb"/>
+<text x="441.0" y="165" font-size="13" fill="#111">619.7 µs</text>
+<text x="290" y="195" font-size="13" text-anchor="end" fill="#333">codegen_types[p200]</text>
+<rect x="300" y="180" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="195" font-size="13" fill="#111">2,516.5 µs</text>
+</svg>

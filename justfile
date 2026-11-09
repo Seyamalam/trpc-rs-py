@@ -53,9 +53,16 @@ ci-examples:
 ci-docs:
     uv run mkdocs build --strict
 
-# Release gate: full CI + audits + fuzzers (short) + cross-platform wheels + benchmarks.
+# Benchmark suite (MISSION.md section 10): raw JSON results + SVG charts.
+bench:
+    uv run python benchmarks/run.py
+    uv run python benchmarks/plot.py
+
+# Release gate: full CI + benchmarks + audits + fuzzers (short) + cross-platform wheels.
 release-check: ci
-    @echo "release-check: audits, fuzzers, cross-platform wheels and benchmarks land in 0.8.0+ (see MISSION.md roadmap)"
+    uv run python benchmarks/run.py
+    uv run python benchmarks/plot.py
+    @echo "release-check: audits, fuzzers and cross-platform wheels land in 0.8.0+ (see MISSION.md roadmap)"
 
 # Individual pieces for quick iteration.
 fmt:

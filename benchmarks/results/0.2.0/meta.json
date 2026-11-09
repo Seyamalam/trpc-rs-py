@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "timestamp_utc": "2026-11-09T09:49:29Z",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "python": "3.14.7",
+  "cpu_count": 18,
+  "rust": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "node": "v26.7.0",
+  "oha": "oha 1.16.0",
+  "duration_per_workload": "5s",
+  "connections": 16,
+  "server_workers": 1,
+  "warmup": "readiness probe before each server; oha runs after probe",
+  "validation": "none on any server (unannotated handlers / no Node input parser)",
+  "cpu_brand": "Apple M5 Pro"
+}

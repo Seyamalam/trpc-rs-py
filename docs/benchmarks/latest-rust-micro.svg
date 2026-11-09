@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="330" viewBox="0 0 980 330" font-family="sans-serif">
+<rect width="980" height="330" fill="#ffffff"/>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Rust core hot paths — mean ns (0.2.0)</text>
+<text x="290" y="75" font-size="13" text-anchor="end" fill="#333">build_response_batch_10</text>
+<rect x="300" y="60" width="514.2" height="20" fill="#2563eb"/>
+<text x="822.2" y="75" font-size="13" fill="#111">1,960.9 ns</text>
+<text x="290" y="105" font-size="13" text-anchor="end" fill="#333">build_response_single</text>
+<rect x="300" y="90" width="54.0" height="20" fill="#2563eb"/>
+<text x="362.0" y="105" font-size="13" fill="#111">205.9 ns</text>
+<text x="290" y="135" font-size="13" text-anchor="end" fill="#333">error_envelope</text>
+<rect x="300" y="120" width="76.0" height="20" fill="#2563eb"/>
+<text x="384.0" y="135" font-size="13" fill="#111">290.0 ns</text>
+<text x="290" y="165" font-size="13" text-anchor="end" fill="#333">parse_batch_10_get</text>
+<rect x="300" y="150" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="165" font-size="13" fill="#111">2,059.4 ns</text>
+<text x="290" y="195" font-size="13" text-anchor="end" fill="#333">parse_batch_10_post</text>
+<rect x="300" y="180" width="482.7" height="20" fill="#2563eb"/>
+<text x="790.7" y="195" font-size="13" fill="#111">1,840.8 ns</text>
+<text x="290" y="225" font-size="13" text-anchor="end" fill="#333">parse_single_get</text>
+<rect x="300" y="210" width="61.4" height="20" fill="#2563eb"/>
+<text x="369.4" y="225" font-size="13" fill="#111">234.3 ns</text>
+<text x="290" y="255" font-size="13" text-anchor="end" fill="#333">parse_single_post</text>
+<rect x="300" y="240" width="45.6" height="20" fill="#2563eb"/>
+<text x="353.6" y="255" font-size="13" fill="#111">174.1 ns</text>
+<text x="290" y="285" font-size="13" text-anchor="end" fill="#333">route_lookup_200</text>
+<rect x="300" y="270" width="2.0" height="20" fill="#2563eb"/>
+<text x="310.0" y="285" font-size="13" fill="#111">7.6 ns</text>
+</svg>
