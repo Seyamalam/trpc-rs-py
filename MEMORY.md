@@ -5,9 +5,11 @@
 
 ## Current version and milestone
 
-- Version: **0.2.0 released** (`v0.2.0` tag pushed); milestone **0.3.0 Launch version** — in progress.
+- Version: **0.3.0 released** (`v0.3.0` tag pushed, wheel in `target/wheels/`);
+  milestone **0.3.0 Launch version** — complete, awaiting user publish + feedback.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- Roadmap: 0.2.0 Core on FastAPI (done) → **0.3.0 Launch version → STOP and ask user** → 0.4.0+ per user-approved plan.
+- Roadmap: 0.2.0 Core on FastAPI (done) → 0.3.0 Launch version (done) → **STOP;
+  ask user to publish + report feedback** → 0.4.0+ per user-approved plan.
 
 ## What is done
 
@@ -245,18 +247,20 @@
 
 ## Next tasks in priority order
 
-1. **0.3.0 nearly complete.** Landed so far: SSE subscriptions end to end
-   (Rust `SseEncoder`, `@router.subscription` + `tracked`, disconnect
-   cancellation, codegen `SubscriptionProcedure`, official-client runtime
-   tests), `trpc-py dev` live type sync + argparse CLI (`dev`, `codegen ts`,
-   `codegen openapi`, `routes`, `check`, `doctor`), REST/OpenAPI output
-   (`RestRoute` opt-in, `mount_rest`, `generate_openapi`, `merge_openapi`,
-   `attach(rest_path)`, openapi-typescript client verified live), `trpc-py
-   init` Next.js+FastAPI template, `ai-chat`/`live-types` examples, and
-   `docs/launch/` materials.
-2. Remaining 0.3.0 work: benchmark run (optional re-check), CHANGELOG date,
-   `chore(release): v0.3.0` bump + annotated tag + push. Then **STOP** and
-   ask the user to publish + report feedback (MISSION §19).
+1. **0.3.0 released** (`v0.3.0`, commit `dcbc7c9`). Landed: SSE subscriptions
+   end to end (Rust `SseEncoder`, `@router.subscription` + `tracked`,
+   disconnect cancellation, codegen `SubscriptionProcedure`, official-client
+   runtime tests), `trpc-py dev` live type sync + argparse CLI (`dev`,
+   `codegen ts`, `codegen openapi`, `routes`, `check`, `doctor`), REST/OpenAPI
+   output (`RestRoute` opt-in, `mount_rest`, `generate_openapi`,
+   `merge_openapi`, `attach(rest_path)`, openapi-typescript client verified
+   live), `trpc-py init` Next.js+FastAPI template, `ai-chat`/`live-types`
+   examples, `docs/launch/` materials, 0.3.0 benchmark run, and a
+   SIGINT-responsiveness fix in the dev watcher loop.
+2. **Launch handoff (MISSION §19):** user publishes the release + draft
+   announcement (`docs/launch/announcement.md`), collects feedback, then we
+   update MEMORY and re-prioritize the roadmap together. Do not start 0.4.0
+   work until the user approves a revised plan.
 
 ## Open questions
 
@@ -306,18 +310,20 @@
 
 ## Latest benchmark headline numbers
 
-- **0.2.0 run** (M5 Pro, 16 conns, 5s; method + raw JSON in
-  `benchmarks/results/0.2.0/`, charts in `docs/benchmarks/`): trpc-fastapi
-  16,233 req/s single query (p99 1.35 ms) vs plain FastAPI 11,686 req/s
-  (p99 2.05 ms) — the mount is faster than a plain JSON view, ~2x on 100 KB
-  payloads (6,440 vs 3,214 req/s). Node `@trpc/server` standalone is ~2.2x
-  faster on small requests (35,634 req/s) — Python dispatch dominates, as
-  expected. Adapter micros are within noise of the baseline (~498 µs both).
-  `generate_types`: 128 µs @10, 627 µs @50, 2,520 µs @200 procedures. Rust
-  micros: route lookup 7.4 ns, single-call parse 164–228 ns.
-- SSE/streaming and live-type-sync latency benches land with 0.3.0.
+- **0.3.0 run** (M5 Pro, 16 conns, 5s; method + raw JSON in
+  `benchmarks/results/0.3.0/`, charts in `docs/benchmarks/`): trpc-fastapi
+  16,269 req/s single query (p99 1.08 ms) vs plain FastAPI 11,203 req/s
+  (p99 1.97 ms) — the mount is ~45% faster than a plain JSON view, ~2x on
+  100 KB payloads (6,547 vs 3,204 req/s). Node `@trpc/server` standalone is
+  ~2.3x faster on small requests (37,553 req/s) — Python dispatch dominates,
+  as expected. Adapter micros are within noise of the baseline (~466 µs
+  both). `generate_types`: 125 µs @10, 620 µs @50, 2,400 µs @200 procedures.
+  Rust micros: route lookup 7.4 ns, single-call parse 158–203 ns.
+- SSE/streaming load benchmarks still deferred (functional coverage shipped
+  with 0.3.0).
 
 ## User feedback from the launch
 
-- Not yet launched. Per MISSION §19, after 0.3.0 work stops and the user is
-  asked to publish + report feedback; record it here.
+- v0.3.0 released 2026-11-09; the user has been asked to publish the release
+  + announcement and report feedback. Not yet received — record it here when
+  it arrives.
