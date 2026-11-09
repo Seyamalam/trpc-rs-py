@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `trpc-py init <name>` scaffolds a Next.js + FastAPI starter (bundled
   `nextjs-fastapi` template): a server with tRPC + REST mounts, a typed
   `@trpc/client` Next.js app, and a generated `app-router.d.ts`.
+- Examples: `examples/ai-chat` (tracked SSE token streaming from an async
+  generator plus REST/OpenAPI on the same router) and `examples/live-types`
+  (`trpc-py dev` regenerating `app-router.d.ts` on save), each with a
+  `smoke.sh` run by the gate.
 
 ## [0.2.0] - 2026-11-09
 

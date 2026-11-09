@@ -8,12 +8,23 @@ so the adapter adds near-zero overhead over a plain JSON endpoint.
 
 ## Status
 
-The project is at version 0.1.0 (foundation milestone). See
+Version 0.2.0 is released; 0.3.0 (the launch milestone) is in development.
+See
 [MEMORY.md](https://github.com/Seyamalam/trpc-rs-py/blob/main/MEMORY.md) for
 what is done and what comes next, the
 [feature matrix](feature-matrix.md) for feature status per adapter, and the
 [wire protocol](protocol.md) page for the exact tRPC v11 wire format and its
 runtime verification against the official client.
+
+## Examples
+
+Runnable examples live in `examples/`, each with a `smoke.sh` exercised by
+the gate:
+
+- `fastapi-basic` — queries, mutations, batching, and error envelopes.
+- `ai-chat` — an LLM-style streamed `chat` subscription with tracked,
+  resumable SSE events, plus the same router serving REST + OpenAPI.
+- `live-types` — `trpc-py dev` regenerating `app-router.d.ts` on every save.
 
 ## TypeScript types from your Python router
 

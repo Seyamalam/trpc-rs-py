@@ -46,9 +46,7 @@ def build_router() -> Router:
         """Fetch a user; raises NOT_FOUND for unknown ids."""
         user = _USERS.get(user_id)
         if user is None:
-            raise TRPCError(
-                f"User {user_id} not found", code=TRPCErrorCode.NOT_FOUND
-            )
+            raise TRPCError(f"User {user_id} not found", code=TRPCErrorCode.NOT_FOUND)
         return user
 
     @router.mutation
