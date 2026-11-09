@@ -219,7 +219,10 @@ def run_dev(
     try:
         while True:
             try:
-                batch = watcher.next(debounce_ms=debounce_ms)
+                # A bounded wait lets the interpreter deliver KeyboardInterrupt
+                # between calls — an unbounded native wait would ignore SIGINT
+                # until the next fs event arrived.
+                batch = watcher.next(timeout_ms=500, debounce_ms=debounce_ms)
             except Exception as error:  # watcher backend error — keep watching
                 print(f"trpc-py dev: watcher error: {error}", file=sys.stderr)
                 continue
