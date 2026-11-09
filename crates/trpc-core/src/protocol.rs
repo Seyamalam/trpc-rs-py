@@ -260,22 +260,29 @@ pub fn parse_request(request: Request<'_>, limits: Limits) -> Result<ParsedReque
 }
 
 fn batch_inputs(value: json::Value, count: usize) -> Result<Vec<json::Value>, TrpcError> {
+    if value == json::Value::Object(serde_json::Map::new()) {
+        // The official client omits every undefined input while JSON-stringifying
+        // its batch dictionary, yielding `{}` for an all-no-input batch.
+        return Ok(vec![json::Value::Null; count]);
+    }
     let json::Value::Object(mut object) = value else {
         return Err(bad_request("Batch input must be a JSON object"));
     };
-    if object.len() != count {
-        return Err(bad_request(
-            "Batch input count does not match procedure paths",
-        ));
+    // The official client omits `undefined` inputs when JSON-stringifying the
+    // batch dictionary. Missing indexes therefore mean no input (null) for
+    // that call; present indexes must still be numeric and within this batch.
+    for key in object.keys() {
+        let Ok(index) = key.parse::<usize>() else {
+            return Err(bad_request("Batch input keys must be numeric indexes"));
+        };
+        if index >= count {
+            return Err(bad_request("Batch input index exceeds procedure paths"));
+        }
     }
     let mut inputs = Vec::with_capacity(count);
     for index in 0..count {
         let key = index.to_string();
-        inputs.push(
-            object
-                .remove(&key)
-                .ok_or_else(|| bad_request("Batch input keys must be sequential"))?,
-        );
+        inputs.push(object.remove(&key).unwrap_or(json::Value::Null));
     }
     Ok(inputs)
 }
@@ -651,7 +658,24 @@ mod tests {
     }
 
     #[test]
-    fn sparse_batch_keys_are_bad_request() {
+    fn missing_batch_input_indexes_are_null() {
+        let parsed = parse_request(
+            post("a,b", "batch=1", br#"{"1":{"value":2}}"#),
+            Limits::default(),
+        )
+        .unwrap();
+        assert_eq!(parsed.calls[0].input, json::Value::Null);
+        assert_eq!(parsed.calls[1].input["value"], 2);
+    }
+
+    #[test]
+    fn empty_batch_input_object_means_no_inputs() {
+        let parsed = parse_request(post("a,b", "batch=1", b"{}"), Limits::default()).unwrap();
+        assert!(parsed.calls.iter().all(|call| call.input.is_null()));
+    }
+
+    #[test]
+    fn batch_input_indexes_outside_call_count_are_bad_request() {
         assert_eq!(
             parse_request(
                 post("a,b", "batch=1", br#"{"0":1,"2":2}"#),
@@ -724,11 +748,8 @@ mod tests {
 
     #[test]
     fn batch_input_shape_is_validated() {
-        let error = parse_request(
-            get("a,b", "batch=1&input=%7B%220%22%3A1%7D"),
-            Limits::default(),
-        )
-        .unwrap_err();
+        let error =
+            parse_request(get("a,b", "batch=1&input=%5B1%2C2%5D"), Limits::default()).unwrap_err();
         assert_eq!(error.code_name, "BAD_REQUEST");
     }
 
@@ -777,7 +798,7 @@ mod tests {
         );
         assert_eq!(failure.http_status, 404);
         let value: json::Value = json::parse(failure.body.as_bytes()).unwrap();
-        assert_eq!(value["error"]["json"]["data"]["code"], "NOT_FOUND");
+        assert_eq!(value["error"]["data"]["code"], "NOT_FOUND");
     }
 
     #[test]
@@ -792,7 +813,7 @@ mod tests {
         assert_eq!(response.http_status, 404);
         let value: json::Value = json::parse(response.body.as_bytes()).unwrap();
         assert_eq!(value[0]["result"]["data"], 1);
-        assert_eq!(value[1]["error"]["json"]["code"], -32004);
+        assert_eq!(value[1]["error"]["code"], -32004);
     }
 
     fn arbitrary_json() -> impl proptest::strategy::Strategy<Value = json::Value> {

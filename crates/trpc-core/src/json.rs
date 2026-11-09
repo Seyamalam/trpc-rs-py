@@ -38,20 +38,17 @@ pub(crate) fn result_envelope(output: &Value) -> Value {
     serde_json::json!({"result": {"data": output}})
 }
 
-/// Build the tRPC error envelope.
+/// Build the default tRPC v11 error envelope.
 pub(crate) fn error_envelope(error: &TrpcError) -> Value {
-    // VERIFY(compat): the task's required wire shape puts httpStatus directly
-    // under error.json; compare this placement with official @trpc/client tests.
+    // The default tRPC v11 error shape is flat under `error`; the `json`
+    // transformer wrapper is not part of the error envelope.
     serde_json::json!({
         "error": {
-            "json": {
-                "message": error.message,
-                "code": error.data_code,
-                "httpStatus": error.http_status,
-                "data": {
-                    "code": error.code_name,
-                    "httpStatus": error.http_status
-                }
+            "message": error.message,
+            "code": error.data_code,
+            "data": {
+                "code": error.code_name,
+                "httpStatus": error.http_status
             }
         }
     })

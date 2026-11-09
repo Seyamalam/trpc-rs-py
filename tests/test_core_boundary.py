@@ -80,7 +80,12 @@ def test_build_response_single_success_and_error() -> None:
     error = CallResult.error("missing", "NOT_FOUND", -32004, 404, "NOT_FOUND")
     status, body = build_response([error], False)
     assert status == 404
-    assert json.loads(body)["error"]["json"]["data"]["code"] == "NOT_FOUND"
+    error_body = json.loads(body)["error"]
+    assert error_body == {
+        "message": "missing",
+        "code": -32004,
+        "data": {"code": "NOT_FOUND", "httpStatus": 404},
+    }
 
 
 def test_build_response_mixed_batch_and_validates_error_mapping() -> None:
@@ -89,7 +94,8 @@ def test_build_response_mixed_batch_and_validates_error_mapping() -> None:
     )
     assert status == 404
     assert json.loads(body)[0] == {"result": {"data": 1}}
-    assert json.loads(body)[1]["error"]["json"]["code"] == -32004
+    assert json.loads(body)[1]["error"]["code"] == -32004
+    assert json.loads(body)[1]["error"]["data"]["code"] == "NOT_FOUND"
     with pytest.raises(ValueError, match="do not match"):
         CallResult.error("missing", "NOT_FOUND", -32001, 404, "NOT_FOUND")
 

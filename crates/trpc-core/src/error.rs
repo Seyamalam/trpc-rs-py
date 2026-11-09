@@ -145,10 +145,11 @@ impl TrpcError {
         }
     }
 
-    /// Serialize to the tRPC error JSON envelope with numeric code and HTTP status
-    /// in `error.json`, and the machine-readable name under `error.json.data.code`.
+    /// Serialize to the default tRPC v11 flat error envelope.
     ///
-    /// The inner `data.code` is the machine-readable code name.
+    /// The numeric JSON-RPC code is under `error.code`; the machine-readable
+    /// name and HTTP status are under `error.data.code` and
+    /// `error.data.httpStatus` respectively.
     #[must_use]
     pub fn to_envelope(&self) -> String {
         // Serialization of serde_json::Value is infallible; this fallback is unreachable.
@@ -196,10 +197,10 @@ mod tests {
     fn envelope_shape() {
         let err = TrpcError::new(ErrorCode::NotFound, "No procedure found on path \"x\"");
         let json = crate::json::parse(err.to_envelope().as_bytes()).unwrap();
-        let inner = &json["error"]["json"];
+        let inner = &json["error"];
         assert_eq!(inner["message"], "No procedure found on path \"x\"");
         assert_eq!(inner["code"], -32004);
-        assert_eq!(inner["httpStatus"], 404);
         assert_eq!(inner["data"]["code"], "NOT_FOUND");
+        assert_eq!(inner["data"]["httpStatus"], 404);
     }
 }

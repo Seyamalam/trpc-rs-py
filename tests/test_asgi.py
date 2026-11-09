@@ -129,14 +129,14 @@ def test_pydantic_input_and_output_validation_integration() -> None:
 
     missing = client.get("/trpc/greet", params={"input": query_input(user={"name": "Ada"})})
     assert missing.status_code == 400
-    assert missing.json()["error"]["json"]["message"] == "Invalid input: user: Field required"
+    assert missing.json()["error"]["message"] == "Invalid input: user: Field required"
 
     extra = client.get(
         "/trpc/greet",
         params={"input": query_input(user={"name": "Ada", "age": 37}, extra=1)},
     )
     assert extra.status_code == 400
-    assert extra.json()["error"]["json"]["message"] == (
+    assert extra.json()["error"]["message"] == (
         "Invalid input: input: Extra inputs are not permitted"
     )
 
@@ -153,7 +153,7 @@ def test_pydantic_input_and_output_validation_integration() -> None:
     app.mount("/trpc", mount(router, production=True))
     response = TestClient(app).get("/trpc/wrong_output")
     assert response.status_code == 500
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["message"] == "Internal server error"
     assert "not_greeting" not in json.dumps(response.json())
 
@@ -184,7 +184,7 @@ def test_serializer_failure_is_normalized_in_development_and_production() -> Non
     ):
         response = TestClient(app).get("/trpc/serialized")
         assert response.status_code == 500
-        error = response.json()["error"]["json"]
+        error = response.json()["error"]
         assert error["data"]["code"] == "INTERNAL_SERVER_ERROR"
         assert error["message"] == expected_message
         assert "secret serializer token" not in json.dumps(response.json())
@@ -207,7 +207,7 @@ def test_run_call_normalizes_arbitrary_output_validator_exceptions() -> None:
     ):
         result = asyncio.run(_run_call(procedure, None, production, (None, validator)))
         status, body = build_response([result], False)
-        error = json.loads(body)["error"]["json"]
+        error = json.loads(body)["error"]
         assert status == 500
         assert error["message"] == expected_message
         assert "secret custom validator detail" not in body
@@ -230,7 +230,7 @@ def test_batched_validation_returns_ordered_individual_envelopes() -> None:
     assert response.status_code == 400
     result = response.json()
     assert result[0] == {"result": {"data": 4}}
-    assert result[1]["error"]["json"]["data"]["code"] == "BAD_REQUEST"
+    assert result[1]["error"]["data"]["code"] == "BAD_REQUEST"
     assert "secret" not in json.dumps(result)
 
 
@@ -260,7 +260,7 @@ def test_positional_only_typed_procedure_validates_and_invokes_positionally() ->
 
     invalid = client.get("/trpc/positional", params={"input": query_input(value="bad-secret")})
     assert invalid.status_code == 400
-    error = invalid.json()["error"]["json"]
+    error = invalid.json()["error"]
     assert error["data"]["code"] == "BAD_REQUEST"
     assert error["message"] == "Invalid input: value: Invalid integer"
     assert "bad-secret" not in invalid.text
@@ -277,7 +277,7 @@ def test_missing_required_unannotated_parameter_is_bad_request() -> None:
         "/trpc/required", params={"input": query_input(value=1)}
     )
     assert response.status_code == 400
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["data"]["code"] == "BAD_REQUEST"
     assert error["message"] == "Invalid input: missing: Field required"
 
@@ -333,7 +333,7 @@ def test_unannotated_procedure_keeps_legacy_invocation() -> None:
 def test_trpc_error_maps_to_status_and_envelope(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/boom")
     assert response.status_code == 404
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["data"]["code"] == "NOT_FOUND"
     assert error["data"]["httpStatus"] == 404
     assert error["code"] == -32004
@@ -343,7 +343,7 @@ def test_trpc_error_maps_to_status_and_envelope(dev_client: TestClient) -> None:
 def test_unexpected_exception_leaks_repr_in_dev_mode(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/explode")
     assert response.status_code == 500
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert "secret internals" in error["message"]
     assert error["data"]["code"] == "INTERNAL_SERVER_ERROR"
 
@@ -351,7 +351,7 @@ def test_unexpected_exception_leaks_repr_in_dev_mode(dev_client: TestClient) -> 
 def test_unexpected_exception_is_fixed_message_in_production(prod_client: TestClient) -> None:
     response = prod_client.get("/trpc/explode")
     assert response.status_code == 500
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["message"] == "Internal server error"
     assert "secret internals" not in json.dumps(response.json())
 
@@ -359,7 +359,7 @@ def test_unexpected_exception_is_fixed_message_in_production(prod_client: TestCl
 def test_wrong_input_shape_is_bad_request(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/echo", params={"input": query_input(wrong=1)})
     assert response.status_code == 400
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["data"]["code"] == "BAD_REQUEST"
     assert error["message"] == "Invalid input: input: Extra inputs are not permitted"
 
@@ -367,7 +367,7 @@ def test_wrong_input_shape_is_bad_request(dev_client: TestClient) -> None:
 def test_missing_procedure_is_not_found(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/does_not_exist")
     assert response.status_code == 404
-    assert response.json()["error"]["json"]["data"]["code"] == "NOT_FOUND"
+    assert response.json()["error"]["data"]["code"] == "NOT_FOUND"
 
 
 def test_oversized_body_is_413_without_reading(dev_client: TestClient) -> None:
@@ -380,7 +380,7 @@ def test_oversized_body_is_413_without_reading(dev_client: TestClient) -> None:
         headers={"content-type": "application/json"},
     )
     assert response.status_code == 413
-    assert response.json()["error"]["json"]["data"]["code"] == "PAYLOAD_TOO_LARGE"
+    assert response.json()["error"]["data"]["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_batch_size_limit_is_413() -> None:
@@ -391,7 +391,7 @@ def test_batch_size_limit_is_413() -> None:
     batch_input = json.dumps({"0": None, "1": None})
     response = client.get("/trpc/ping,ping", params={"batch": "1", "input": batch_input})
     assert response.status_code == 413
-    assert response.json()["error"]["json"]["data"]["code"] == "PAYLOAD_TOO_LARGE"
+    assert response.json()["error"]["data"]["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_non_json_content_type_is_rejected(dev_client: TestClient) -> None:
@@ -399,7 +399,7 @@ def test_non_json_content_type_is_rejected(dev_client: TestClient) -> None:
         "/trpc/create", content=b'{"title":"x"}', headers={"content-type": "text/plain"}
     )
     assert response.status_code == 400
-    assert response.json()["error"]["json"]["data"]["code"] == "BAD_REQUEST"
+    assert response.json()["error"]["data"]["code"] == "BAD_REQUEST"
 
 
 def test_json_charset_parameters_are_lenient(dev_client: TestClient) -> None:
@@ -415,13 +415,13 @@ def test_json_charset_parameters_are_lenient(dev_client: TestClient) -> None:
 def test_unsupported_http_method_is_method_not_supported(dev_client: TestClient) -> None:
     response = dev_client.put("/trpc/ping")
     assert response.status_code == 405
-    assert response.json()["error"]["json"]["data"]["code"] == "METHOD_NOT_SUPPORTED"
+    assert response.json()["error"]["data"]["code"] == "METHOD_NOT_SUPPORTED"
 
 
 def test_mutation_over_get_is_method_not_supported(dev_client: TestClient) -> None:
     response = dev_client.get("/trpc/create", params={"input": query_input(title="x")})
     assert response.status_code == 405
-    assert response.json()["error"]["json"]["data"]["code"] == "METHOD_NOT_SUPPORTED"
+    assert response.json()["error"]["data"]["code"] == "METHOD_NOT_SUPPORTED"
 
 
 def test_sync_handler_runs_via_to_thread(dev_client: TestClient) -> None:
@@ -542,7 +542,7 @@ def test_post_without_content_type_is_bad_request(router: Router) -> None:
     asyncio.run(app(scope, _raw_receive(messages), _raw_send(sent)))
     assert sent[0]["status"] == 400
     body = json.loads(sent[1]["body"])
-    assert body["error"]["json"]["data"]["code"] == "BAD_REQUEST"
+    assert body["error"]["data"]["code"] == "BAD_REQUEST"
 
 
 def test_disconnect_mid_body_never_invokes_handler() -> None:
@@ -603,7 +603,7 @@ def test_handler_type_error_in_production_is_internal_server_error() -> None:
     for path in ("/trpc/sync_breaks", "/trpc/async_breaks"):
         response = client.get(path, params={"input": query_input(count=1)})
         assert response.status_code == 500
-        error = response.json()["error"]["json"]
+        error = response.json()["error"]
         assert error["data"]["code"] == "INTERNAL_SERVER_ERROR"
         assert error["message"] == "Internal server error"
         assert "leaked handler detail" not in json.dumps(response.json())
@@ -620,7 +620,7 @@ def test_handler_type_error_in_dev_mode_leaks_repr() -> None:
     client = TestClient(app)
     response = client.get("/trpc/breaks", params={"input": query_input(count=1)})
     assert response.status_code == 500
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["data"]["code"] == "INTERNAL_SERVER_ERROR"
     assert "internal failure: leaked handler detail" in error["message"]
 
@@ -638,7 +638,7 @@ def test_trpc_error_internal_server_error_message_is_redacted_in_production() ->
     client = TestClient(app)
     response = client.get("/trpc/internal")
     assert response.status_code == 500
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["message"] == "Internal server error"
     assert "select * from secrets" not in json.dumps(response.json())
 
@@ -654,7 +654,7 @@ def test_trpc_error_client_facing_codes_pass_through_in_production() -> None:
     client = TestClient(app)
     response = client.get("/trpc/missing")
     assert response.status_code == 404
-    error = response.json()["error"]["json"]
+    error = response.json()["error"]
     assert error["data"]["code"] == "NOT_FOUND"
     assert error["message"] == "User not found"
 
@@ -674,7 +674,7 @@ def test_trpc_error_messages_all_pass_through_in_dev_mode() -> None:
 
     app = mount(router, production=False)
     client = TestClient(app)
-    assert client.get("/trpc/internal").json()["error"]["json"]["message"] == (
+    assert client.get("/trpc/internal").json()["error"]["message"] == (
         "select * from secrets where user = 1"
     )
-    assert client.get("/trpc/missing").json()["error"]["json"]["message"] == "User not found"
+    assert client.get("/trpc/missing").json()["error"]["message"] == "User not found"
