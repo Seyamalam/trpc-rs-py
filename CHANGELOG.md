@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `trpc-py codegen zod` (MISSION §2.5): zod v4 schemas for procedure inputs —
+  string lengths, regex, numeric ranges, multiple-of, enums, literals,
+  optional/nullable, defaults, unions, and `z.discriminatedUnion` for models
+  sharing a `Literal` field. Unmappable constraints emit `// dropped:`
+  comments; the refusal set matches `generate_types`. Parity verified end to
+  end: hypothesis-generated cases (`fixtures/zod-cases.json`, Pydantic
+  verdicts) asserted against `safeParse` verdicts in
+  `src/zod-parity.test.ts`, plus `z.input`/`z.output` assignability to the
+  generated router types. `zod` added as a ts-tests dev dependency.
 - Typed errors (ADR 0009): procedures declare `errors=[PostNotFound,
   RateLimited]` — `TRPCError` subclasses with a `code` class attribute and an
   optional Pydantic `data_model`. Declared payloads merge into `error.data`

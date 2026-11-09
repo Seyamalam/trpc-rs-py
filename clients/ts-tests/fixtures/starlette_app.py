@@ -9,12 +9,11 @@ from __future__ import annotations
 import os
 import sys
 
+from router import build_fixture_router
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from trpc_rs_py import mount, mount_rest
-
-from router import build_fixture_router
 
 
 def main() -> None:

@@ -34,6 +34,7 @@ dev = [
     "uvicorn>=0.30",
     "pytest-benchmark>=5.0",
     "openapi-spec-validator>=0.7.1",
+    "hypothesis>=6.168.5",
 ]
 
 [tool.maturin]

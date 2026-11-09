@@ -78,6 +78,7 @@ def _cmd_dev(args: argparse.Namespace) -> int:
             watch_dirs=args.watch,
             server=args.server,
             debounce_ms=args.debounce_ms,
+            zod_out=Path(args.zod_out) if args.zod_out else None,
         )
     except (RuntimeError, ValueError) as error:
         print(f"trpc-py dev: {error}", file=sys.stderr)
@@ -90,6 +91,23 @@ def _cmd_codegen(args: argparse.Namespace) -> int:
     router = _load_router(args.app)
     try:
         source = generate_types(router)
+    except TypeError as error:
+        print(f"trpc-py codegen: {error}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(source)
+    print(f"trpc-py codegen: wrote {out}")
+    return 0
+
+
+def _cmd_codegen_zod(args: argparse.Namespace) -> int:
+    """Handle `trpc-py codegen zod`: write the zod-schemas .ts module."""
+    from .zodgen import generate_zod
+
+    router = _load_router(args.app)
+    try:
+        source = generate_zod(router)
     except TypeError as error:
         print(f"trpc-py codegen: {error}", file=sys.stderr)
         return 1
@@ -288,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
     dev.add_argument("--app", required=True, help="router import string (module:attribute)")
     dev.add_argument("--out", required=True, help="destination .d.ts path")
     dev.add_argument(
+        "--zod-out",
+        default=None,
+        help="also write zod input schemas to this .ts path on every save",
+    )
+    dev.add_argument(
         "--watch",
         action="append",
         default=[],
@@ -312,6 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
     codegen_ts.add_argument("--app", required=True, help="router import string (module:attribute)")
     codegen_ts.add_argument("--out", required=True, help="destination .d.ts path")
     codegen_ts.set_defaults(handler=_cmd_codegen)
+    codegen_zod = codegen_sub.add_parser("zod", help="emit zod input schemas (.ts, zod v4)")
+    codegen_zod.add_argument("--app", required=True, help="router import string (module:attribute)")
+    codegen_zod.add_argument("--out", required=True, help="destination .ts path")
+    codegen_zod.set_defaults(handler=_cmd_codegen_zod)
     codegen_openapi = codegen_sub.add_parser(
         "openapi", help="emit the OpenAPI 3.1 document for RestRoute procedures"
     )

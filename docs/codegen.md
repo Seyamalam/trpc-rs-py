@@ -173,6 +173,49 @@ offending annotation:
 - Procedure paths that are both a procedure and a prefix of another (for
   example `a` and `a.b`), which cannot be represented as a nested record.
 
+## Zod schemas
+
+`trpc-py codegen zod --app module:router --out schemas.ts` emits a zod v4
+module validating **procedure inputs** — the same object shapes the `.d.ts`
+input types describe — so frontend forms validate with the backend's rules.
+One `export const <Model>` per referenced Pydantic model plus one
+`export const <Proc>Input` per input-taking procedure; no-input procedures
+emit a comment.
+
+Constraint mapping:
+
+| Pydantic / Python | zod v4 |
+| --- | --- |
+| `int` / `float` / `bool` / `str` | `z.number().int()` / `z.number()` / `z.boolean()` / `z.string()` |
+| `Field(gt/ge/lt/le=)` | `.gt()/.gte()/.lt()/.lte()` |
+| `Field(multiple_of=)` | `.multipleOf()` |
+| `StringConstraints(min_length/max_length/pattern)` | `.min()/.max()/.regex()` |
+| `Field(min_length/max_length)` on lists | `.min()/.max()` |
+| `Literal[...]` | `z.literal(v)` / `z.union([...])` |
+| `str`-valued `Enum` | `z.enum([...])` |
+| `X \| None` | `.nullable()`; `= None` adds `.optional()`; other defaults → `.default(v)` |
+| `Union[A, B]` | `z.union([...])` |
+| models sharing a `Literal` field | `z.discriminatedUnion("field", [...])` |
+| `list[T]` / `tuple[...]` / `dict[str, T]` | `z.array(...)` / `z.tuple([...])` / `z.record(z.string(), ...)` |
+| `datetime` / `date` / `time` / `timedelta` / `UUID` | `z.iso.datetime()` / `.date()` / `.time()` / `.duration()` / `z.uuid()` |
+
+Dropped constraints emit `// dropped: <name>` comments (e.g.
+`StringConstraints.strip_whitespace`, `default_factory`, non-JSON defaults,
+unrecognized metadata classes). Pydantic features that cannot be mapped at
+all — coercion differences (Pydantic lax accepts `"30"`→`int`, `True`→`int`;
+zod is strict), custom validators, serializer metadata, computed fields,
+`RootModel`, `**kwargs`, unannotated parameters — either raise `TypeError`
+(same refusal set as `generate_types`) or are documented divergences. Regex
+patterns are emitted verbatim except `/` escaping; Python-only constructs
+(`\A`, `\Z`, `(?P<name>…)`) do not translate. Pydantic accepts a broader set
+of ISO strings than `z.iso.*` validates in some edge cases.
+
+Parity is tested end to end: `fixtures/generate_zod_cases.py` uses
+`hypothesis` to produce JSON values, records Pydantic's verdict per value in
+`fixtures/zod-cases.json`, and `src/zod-parity.test.ts` asserts the
+generated `SignupInput` schema's `safeParse` returns the same verdict — plus
+`z.input`/`z.output` assignability to the generated router types.
+
 ## Known limitations
 
 - **Input lax coercion.** The server validates inputs with Pydantic's default

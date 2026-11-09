@@ -15,10 +15,9 @@ import os
 import sys
 
 from fastapi import FastAPI
+from router import build_fixture_router
 
 from trpc_rs_py import mount, mount_rest
-
-from router import build_fixture_router
 
 
 def main() -> None:

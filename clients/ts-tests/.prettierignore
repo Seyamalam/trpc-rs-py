@@ -2,3 +2,6 @@
 # never hand-formatted.
 src/app-router.d.ts
 fixtures/app-router.d.ts
+
+fixtures/zod-schemas.ts
+fixtures/zod-cases.json

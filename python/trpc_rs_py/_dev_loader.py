@@ -54,8 +54,11 @@ def main() -> int:
         0 on success, 1 when the import or generation fails (the traceback is
         printed for the parent's terminal, which keeps the last good file).
     """
-    if len(sys.argv) != 3:
-        print("usage: python -m trpc_rs_py._dev_loader <module:attr> <output>", file=sys.stderr)
+    if len(sys.argv) not in (3, 4):
+        print(
+            "usage: python -m trpc_rs_py._dev_loader <module:attr> <output> [zod-output]",
+            file=sys.stderr,
+        )
         return 2
     spec, out = sys.argv[1], Path(sys.argv[2])
     try:
@@ -70,6 +73,10 @@ def main() -> int:
             )
             return 1
         out.write_text(generate_types(app))
+        if len(sys.argv) == 4:
+            from trpc_rs_py.zodgen import generate_zod
+
+            Path(sys.argv[3]).write_text(generate_zod(app))
     except Exception:
         traceback.print_exc()
         return 1

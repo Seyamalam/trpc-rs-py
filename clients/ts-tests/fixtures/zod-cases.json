@@ -1,0 +1,749 @@
+[
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "n00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "n_0u",
+        "nickname": null,
+        "age": 45
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "s00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "sroe5s",
+        "age": 74
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "t9ksodkoc0g1_kz8",
+        "nickname": null,
+        "age": 26
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "dr6i6",
+        "age": 116
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "age": 93,
+        "username": "ykrzp9"
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "age": 115,
+        "username": "s4i"
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "bmdx",
+        "nickname": "\u00fdfR\ud8c2\udf06Z4",
+        "age": 120,
+        "tags": []
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "rjvu7l",
+        "tags": [
+          "",
+          "",
+          ":\u0011\u00d3\u00dc\u00da\u00d5"
+        ],
+        "age": 82,
+        "nickname": null
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "r00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "r0r",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "rrr",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "lekokc3l89",
+        "tags": [
+          "0\u00ac",
+          "2~",
+          "\u001f\u0001\uda15\uddba\ua879\u008d Y\ud935\ude4a"
+        ],
+        "age": 80
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "lekokc3l89",
+        "tags": [
+          "\u001f\u0001\uda15\uddba\ua879\u008d Y\ud935\ude4a",
+          "2~",
+          "\u001f\u0001\uda15\uddba\ua879\u008d Y\ud935\ude4a"
+        ],
+        "age": 80
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "l00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "nickname": "w\ud914\udca4E\u009a/",
+        "username": "a2egz",
+        "age": 61,
+        "tags": []
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "nickname": "w\ud914\udca4E\u009a/",
+        "username": "a22gz",
+        "age": 61,
+        "tags": []
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a22gz",
+        "age": 61,
+        "nickname": "w\ud914\udca4E\u009a/",
+        "tags": []
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a22g2",
+        "age": 61,
+        "nickname": "w\ud914\udca4E\u009a/",
+        "tags": []
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a22",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "zn_m",
+        "age": 47,
+        "tags": [],
+        "nickname": null
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "z00",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "nickname": null,
+        "age": 69,
+        "username": "sy2pfocuz",
+        "tags": [
+          "\u00e2Z\u786d_'i",
+          "",
+          "\u00aa\ud8cf\uded0\u00c9Y\ud8c6\ude80>\u00c9"
+        ]
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "sy2pfocuzf",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "syppfocuzf",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a0a",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "aaa",
+        "age": 13
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "age": 61,
+        "username": "pqre4ox"
+      }
+    },
+    "expect": true
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "a",
+        "age": 0
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "username": "a",
+      "age": 0
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "username": "ab",
+      "age": 88
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "age": null,
+        "tags": null,
+        "username": [
+          ""
+        ]
+      },
+      {
+        "username": [
+          "\u00c9k6"
+        ],
+        "age": 117
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": null,
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "tags": [
+          "\u00e6\uda07\ude1c\u009b",
+          "D\u00c0p8\u0089\u00c3\uda8d\udfc7\u00d6",
+          "fR\ud8c2\udf06Z4",
+          "2\u00a9\ud8f5\udc73m\u00bc \u00b1",
+          "\u00a60\ud967\ude61,1\u00f2\u00b0\udb32\ude40"
+        ],
+        "username": "bab_b__b_",
+        "nickname": -105372,
+        "age": []
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "nickname": null,
+        "username": [
+          "\u00a5\ud815\udfb9",
+          "\u00e0\u001a\u00d7"
+        ],
+        "age": 102
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "nickname": null,
+      "age": 26,
+      "username": null
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "age": [
+        -51284174
+      ],
+      "tags": [
+        "\u00d6\u0010",
+        "\u00d4\u001a\ud8c0\ude55"
+      ],
+      "username": null
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [],
+        "age": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [],
+        "age": null,
+        "nickname": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [
+          ""
+        ],
+        "age": null,
+        "nickname": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [
+          ""
+        ],
+        "age": 1,
+        "nickname": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [
+          "",
+          ""
+        ],
+        "age": null,
+        "nickname": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [
+          "",
+          ""
+        ],
+        "age": 0
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": [
+          "",
+          ""
+        ],
+        "age": 0,
+        "nickname": null
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "tags": "\u00cc\u0087",
+        "age": null,
+        "username": "uef00gz",
+        "nickname": 219945
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "u",
+        "age": 0,
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": "u",
+        "age": 0
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "v\uda0f\udfe7\u00f2\u0007\ud8ae\udfea\u0000",
+          "\u00a8\u009ac\u00ff\u0085\u00c8\ud980\udf17\u00fe",
+          "\u008b\udacc\udf64"
+        ],
+        "age": 85,
+        "username": null,
+        "nickname": "Z\u786d_'i"
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": null,
+        "age": 85,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "v\uda0f\udfe7\u00f2\u0007\ud8ae\udfea\u0000",
+          "\u00a8\u009ac\u00ff\u0085\u00c8\ud980\udf17\u00fe",
+          ""
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": null,
+        "age": 85,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "\u0099",
+          "\u00a8\u009ac\u00ff\u0085\u00c8\ud980\udf17\u00fe",
+          ""
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "age": 85,
+        "username": null,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "\u0099",
+          "\u00a8\u009ac\u00ff\u0085\u00c8\ud980\udf17\u00fe",
+          ""
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": null,
+        "age": 85,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "\u0099",
+          "",
+          ""
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": null,
+        "age": 85,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "\u0099",
+          "\u00b9\u008b\ud848\ude8c",
+          ""
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": {
+      "form": {
+        "username": null,
+        "age": 85,
+        "tags": [
+          "\u00b9\u008b\ud848\ude8c",
+          "\u0099",
+          "\u0099",
+          "\u00b9\u008b\ud848\ude8c",
+          "\u00b9\u008b\ud848\ude8c"
+        ],
+        "nickname": null
+      }
+    },
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": null,
+        "tags": null,
+        "nickname": -13124,
+        "age": [
+          -53781
+        ]
+      },
+      {
+        "age": null,
+        "nickname": "j\u00f0\u001aZ\u00f8\u00d8",
+        "username": "a"
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "username": null,
+        "tags": null,
+        "nickname": -53781,
+        "age": [
+          -53781
+        ]
+      },
+      {
+        "age": null,
+        "nickname": "j\u00f0\u001aZ\u00f8\u00d8",
+        "username": "a"
+      }
+    ],
+    "expect": false
+  },
+  {
+    "schema": "SignupInput",
+    "value": [
+      {
+        "age": null,
+        "nickname": "j\u00f0\u001aZ\u00f8\u00d8",
+        "username": "a"
+      },
+      {
+        "age": null,
+        "nickname": "j\u00f0\u001aZ\u00f8\u00d8",
+        "username": "a"
+      }
+    ],
+    "expect": false
+  }
+]

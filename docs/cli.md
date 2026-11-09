@@ -50,6 +50,18 @@ One-off declaration generation, same `--app`/`--out` contract:
 trpc-py codegen ts --app server:router --out web/router.d.ts
 ```
 
+## `trpc-py codegen zod`
+
+Emit zod v4 schemas for procedure inputs (frontend form validation with the
+backend's rules):
+
+```bash
+trpc-py codegen zod --app server:router --out web/schemas.ts
+```
+
+See [TypeScript codegen](codegen.md#zod-schemas) for the constraint mapping
+table and the list of Pydantic features that cannot be mapped.
+
 ## `trpc-py codegen openapi`
 
 Emit the OpenAPI 3.1 document for `RestRoute`-annotated procedures:

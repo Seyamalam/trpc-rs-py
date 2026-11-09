@@ -95,20 +95,33 @@ def resolve_watch_dirs(app_spec: str, extra_dirs: Sequence[str] = ()) -> list[Pa
     return resolved or [Path.cwd()]
 
 
-def regenerate(app_spec: str, out: Path) -> bool:
+def _swap_if_changed(tmp: Path, out: Path) -> bool:
+    """Atomically replace `out` with `tmp` when contents differ."""
+    new = tmp.read_bytes()
+    if out.exists() and out.read_bytes() == new:
+        tmp.unlink(missing_ok=True)
+        return False
+    out.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(tmp, out)
+    return True
+
+
+def regenerate(app_spec: str, out: Path, zod_out: Path | None = None) -> bool:
     """Regenerate `out` from `--app` in a fresh subprocess, atomically.
 
-    The subprocess writes a sibling `*.tmp` file; the content is compared and
+    The subprocess writes sibling `*.tmp` files; the content is compared and
     `os.replace` applied only when it differs, so untouched types never touch
     the file's mtime. The temp file is removed either way, so a failed run
-    leaves the last good `.d.ts` untouched.
+    leaves the last good `.d.ts` untouched. When `zod_out` is given the same
+    subprocess also writes the zod schema module there.
 
     Args:
         app_spec: Import string such as `server:router`.
         out: Destination `.d.ts` path.
+        zod_out: Optional destination `.ts` path for zod input schemas.
 
     Returns:
-        `True` when `out` was (re)written, `False` on failure or no change.
+        `True` when any file was (re)written, `False` on failure or no change.
 
     Example:
         ```python
@@ -120,9 +133,13 @@ def regenerate(app_spec: str, out: Path) -> bool:
         ```
     """
     tmp = out.with_name(out.name + ".tmp")
+    zod_tmp = zod_out.with_name(zod_out.name + ".tmp") if zod_out else None
+    command = [sys.executable, "-m", "trpc_rs_py._dev_loader", app_spec, str(tmp)]
+    if zod_tmp is not None:
+        command.append(str(zod_tmp))
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "trpc_rs_py._dev_loader", app_spec, str(tmp)],
+            command,
             capture_output=True,
             text=True,
             timeout=30,
@@ -130,20 +147,21 @@ def regenerate(app_spec: str, out: Path) -> bool:
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"trpc-py dev: regeneration failed: {error}", file=sys.stderr)
         tmp.unlink(missing_ok=True)
+        if zod_tmp is not None:
+            zod_tmp.unlink(missing_ok=True)
         return False
     if result.returncode != 0:
         details = result.stderr.strip() or result.stdout.strip() or "unknown error"
         print(f"trpc-py dev: could not reload {app_spec}:", file=sys.stderr)
         print(details, file=sys.stderr)
         tmp.unlink(missing_ok=True)
+        if zod_tmp is not None:
+            zod_tmp.unlink(missing_ok=True)
         return False
-    new = tmp.read_bytes()
-    if out.exists() and out.read_bytes() == new:
-        tmp.unlink(missing_ok=True)
-        return False
-    out.parent.mkdir(parents=True, exist_ok=True)
-    os.replace(tmp, out)
-    return True
+    changed = _swap_if_changed(tmp, out)
+    if zod_tmp is not None and zod_out is not None:
+        changed = _swap_if_changed(zod_tmp, zod_out) or changed
+    return changed
 
 
 def _start_server(server_spec: str, reload_dirs: Sequence[Path]) -> subprocess.Popen[bytes]:
@@ -171,6 +189,7 @@ def run_dev(
     watch_dirs: Sequence[str] = (),
     server: str | None = None,
     debounce_ms: int = 100,
+    zod_out: Path | None = None,
 ) -> int:
     """Run the live-type-sync loop until interrupted.
 
@@ -181,6 +200,8 @@ def run_dev(
         server: Optional `module:app` ASGI import string started with reload.
         debounce_ms: Quiet-window in milliseconds before a save burst
             regenerates (the watcher also caps coalescing at 2 s).
+        zod_out: Optional destination `.ts` path also regenerated on every
+            save with zod input schemas (`codegen zod` output).
 
     Returns:
         0 on `KeyboardInterrupt`; a nonzero exit code never reaches the
@@ -211,7 +232,7 @@ def run_dev(
     server_proc = _start_server(server, directories) if server else None
 
     def sync() -> None:
-        if regenerate(app_spec, out):
+        if regenerate(app_spec, out, zod_out):
             print(f"trpc-py dev: wrote {out}")
 
     print(f"trpc-py dev: watching {', '.join(str(d) for d in directories)}")

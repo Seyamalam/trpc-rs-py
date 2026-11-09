@@ -8,15 +8,27 @@ deliberate `TRPCError`, an unexpected exception, and a tracked subscription.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
-from trpc_rs_py import RestRoute, Router, TRPCError, TRPCErrorCode, Tracked, tracked
+from trpc_rs_py import RestRoute, Router, Tracked, TRPCError, TRPCErrorCode, tracked
 
 
 class GreetingInput(BaseModel):
     name: str
     excited: bool = False
+
+
+class SignupForm(BaseModel):
+    """Constrained input for the zod-codegen parity fixture."""
+
+    username: Annotated[
+        str, StringConstraints(min_length=3, max_length=16, pattern=r"^[a-z][a-z0-9_]*$")
+    ]
+    age: Annotated[int, Field(ge=13, le=120)]
+    nickname: str | None = None
+    tags: Annotated[list[str], Field(max_length=3)] = []
 
 
 class GreetingOutput(BaseModel):
@@ -77,6 +89,10 @@ def build_fixture_router() -> Router:
     @router.mutation(rest=RestRoute("POST", "/posts"))
     def create_post(title: str) -> CreatedPost:
         return CreatedPost(title=title, created=True)
+
+    @router.mutation
+    def signup(form: SignupForm) -> str:
+        return f"signed up {form.username}"
 
     @router.mutation
     def no_input() -> str:

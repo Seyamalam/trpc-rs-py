@@ -50,6 +50,7 @@ from .rest import mount_rest
 from .router import Procedure, ProcedureKind, RestRoute, Router
 from .streaming import Tracked, tracked
 from .validation import build_input_validator, build_output_validator
+from .zodgen import generate_zod
 
 try:
     __version__ = _package_version("trpc-rs-py")
@@ -73,6 +74,7 @@ __all__ = [
     "data_code_for",
     "generate_openapi",
     "generate_types",
+    "generate_zod",
     "merge_openapi",
     "mount",
     "mount_rest",

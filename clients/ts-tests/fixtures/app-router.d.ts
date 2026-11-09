@@ -50,6 +50,13 @@ export interface CreatedPost {
   created: boolean;
 }
 
+export interface SignupForm {
+  username: string;
+  age: number;
+  nickname?: string | null;
+  tags?: Array<string>;
+}
+
 export interface Tick {
   tick: number;
 }
@@ -118,6 +125,16 @@ export interface Create_postProcedure
     errorShape: AppRouterErrorShape;
   }> {}
 
+export interface SignupProcedure
+  extends MutationProcedure<{
+    meta: unknown;
+    input: {
+      form: SignupForm;
+    };
+    output: string;
+    errorShape: AppRouterErrorShape;
+  }> {}
+
 export interface No_inputProcedure
   extends MutationProcedure<{
     meta: unknown;
@@ -142,6 +159,7 @@ export type AppRouterRecord = {
   explode: ExplodeProcedure;
   post_by_id_or_fail: Post_by_id_or_failProcedure;
   create_post: Create_postProcedure;
+  signup: SignupProcedure;
   no_input: No_inputProcedure;
   ticks: TicksProcedure;
 };

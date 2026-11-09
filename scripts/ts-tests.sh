@@ -72,6 +72,22 @@ diff -q src/rest-api.d.ts src/rest-api.generated.d.ts >/dev/null || {
 }
 rm -f src/rest-api.generated.d.ts
 
+# The committed zod schemas + parity cases must match the fixture router.
+uv run --project ../.. python - <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "fixtures")
+from router import build_fixture_router
+
+from trpc_rs_py import generate_zod
+
+committed = Path("fixtures/zod-schemas.ts").read_text()
+if committed != generate_zod(build_fixture_router()):
+    print("ts-tests: fixtures/zod-schemas.ts is stale; run `uv run python clients/ts-tests/fixtures/generate_zod_schemas.py`", file=sys.stderr)
+    sys.exit(1)
+PY
+
 # Runtime compatibility: spawns the FastAPI/Starlette fixture servers and runs
 # the official @trpc/client v11 against them over real HTTP.
 pnpm test
