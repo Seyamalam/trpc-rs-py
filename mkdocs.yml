@@ -13,6 +13,7 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
+  - Subscriptions: subscriptions.md
   - Benchmarks: benchmarks.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md
@@ -25,3 +26,4 @@ nav:
       - 0004 Standalone server framework: decisions/0004-standalone-server-framework.md
       - 0005 OpenAPI document placement: decisions/0005-openapi-document-placement.md
       - 0006 CLI implementation language: decisions/0006-cli-implementation-language.md
+      - 0007 SSE subscription architecture: decisions/0007-sse-subscription-architecture.md

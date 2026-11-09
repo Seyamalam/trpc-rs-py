@@ -19,11 +19,12 @@ Example:
 from __future__ import annotations
 
 import enum
+from collections.abc import AsyncIterator
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from trpc_rs_py import Router
+from trpc_rs_py import Router, Tracked, tracked
 
 
 class Color(enum.Enum):
@@ -279,6 +280,20 @@ def build_router() -> Router:
     @router.query
     def type_keyword(first: infer, second: keyof, third: readonly) -> unique:
         """Round-trip models named after TypeScript type-context keywords."""
+        raise NotImplementedError
+
+    @router.subscription
+    async def ticks() -> AsyncIterator[int]:
+        """No-input subscription yielding untracked items."""
+        yield 0
+        raise NotImplementedError
+
+    @router.subscription
+    async def chat(room: str, lastEventId: str | None = None) -> AsyncIterator[Tracked[Post]]:
+        """Tracked subscription: `lastEventId` is protocol resume metadata,
+        never part of the emitted input type; `Tracked[Post]` items reach the
+        client as `{id, data}` pairs."""
+        yield tracked("0", Post(title="t", tags=[], color=Color.RED))
         raise NotImplementedError
 
     nested = Router()

@@ -12,6 +12,7 @@ import type {
   MutationProcedure,
   QueryProcedure,
   Router,
+  SubscriptionProcedure,
   inferRouterInputs,
   inferRouterOutputs,
 } from "@trpc/server/unstable-core-do-not-import";
@@ -37,6 +38,10 @@ export interface GreetingOutput {
 export interface CreatedPost {
   title: string;
   created: boolean;
+}
+
+export interface Tick {
+  tick: number;
 }
 
 export interface PingProcedure
@@ -101,6 +106,14 @@ export interface No_inputProcedure
     errorShape: DefaultErrorShape;
   }> {}
 
+export interface TicksProcedure
+  extends SubscriptionProcedure<{
+    meta: unknown;
+    input: undefined;
+    output: AsyncIterable<{ id: string; data: Tick; }>;
+    errorShape: DefaultErrorShape;
+  }> {}
+
 export type AppRouterRecord = {
   ping: PingProcedure;
   echo: EchoProcedure;
@@ -109,6 +122,7 @@ export type AppRouterRecord = {
   explode: ExplodeProcedure;
   create_post: Create_postProcedure;
   no_input: No_inputProcedure;
+  ticks: TicksProcedure;
 };
 
 export interface AppRouter extends Router<AppRouterRootTypes, AppRouterRecord> {}

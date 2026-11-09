@@ -6,7 +6,9 @@ end-to-end types that update live as you edit Python.
 
 ```python
 # FastAPI — any ASGI framework works; Flask and Django adapters are planned
-from trpc_rs_py import Router
+from collections.abc import AsyncIterator
+
+from trpc_rs_py import Router, tracked
 
 router = Router()
 
@@ -17,6 +19,11 @@ def greeting(name: str) -> str:
 @router.mutation
 async def create_post(title: str) -> dict:
     return {"id": 1, "title": title}
+
+@router.subscription
+async def events() -> AsyncIterator[dict]:
+    async for event in stream():
+        yield tracked(str(event.id), event.payload)  # resumable SSE ids
 ```
 
 ```ts
@@ -25,11 +32,12 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 //    ^? string
 ```
 
-> **Status: pre-release foundation (0.1.0).** The core protocol lands in
-> 0.2.0; the launch version (live type sync, AI streaming, OpenAPI output,
-> starter templates) is 0.3.0. See [`MISSION.md`](MISSION.md) for the full
-> roadmap and [`docs/feature-matrix.md`](docs/feature-matrix.md) for feature
-> status.
+> **Status: 0.2.0 released; 0.3.0 in development.** Queries, mutations,
+> batching, and SSE subscriptions are wire-compatible with the official
+> `@trpc/client` v11 (verified live against FastAPI and Starlette). The
+> launch version adds live type sync, OpenAPI output, and starter templates.
+> See [`MISSION.md`](MISSION.md) for the full roadmap and
+> [`docs/feature-matrix.md`](docs/feature-matrix.md) for feature status.
 
 ## Why this exists
 

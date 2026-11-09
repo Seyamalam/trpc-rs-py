@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Subscriptions over Server-Sent Events, wire-compatible with the official
+  `@trpc/client` v11 `httpSubscriptionLink`: `@router.subscription` async
+  generators, `tracked(event_id, data)` resumable event ids, `connected` /
+  `data` / `ping` / `restore-id` / `serialized-error` / `return` frames
+  encoded byte-for-byte like `@trpc/server` (`SseEncoder` in the Rust core),
+  `lastEventId` resume via header, query parameter, or handler argument, and
+  keep-alive pings plus a per-frame size cap (`sse_ping_interval`,
+  `max_sse_event_size` on `mount()`/`attach()`).
+- Client-disconnect cancellation: `http.disconnect` cancels the pending
+  `__anext__` and closes the async generator.
+- Codegen emits `SubscriptionProcedure` declarations with
+  `AsyncIterable<...>` outputs (`{ id, data }` items for tracked yields).
+- Official-client runtime coverage grew to 32 live tests per adapter pair,
+  including SSE subscription streaming and async iteration.
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

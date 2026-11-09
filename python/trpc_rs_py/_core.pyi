@@ -71,11 +71,36 @@ def parse_request(
 ) -> ParsedRequest: ...
 def build_response(results: list[CallResult], batched: bool) -> tuple[int, str]: ...
 
+@final
+class SseEncoder:
+    r"""Stateful per-stream SSE encoder for one subscription response.
+
+    Encodes frames in the official v11 subscription format
+    (`@trpc/server` 11.25.0 `sseStreamProducer`): a `connected` event first,
+    then `data` events (tracked events carry `id:`), keep-alive `ping`s, a
+    final `return` on clean end, and `serialized-error` carrying the flat v11
+    error envelope. Event ids containing `\n`, `\r`, or NUL are rejected;
+    once an event id is established, untracked events emit an empty `id:` line
+    plus a `restore-id` frame, exactly like upstream.
+    """
+
+    def __new__(cls, last_event_id: str | None = None) -> SseEncoder: ...
+    @staticmethod
+    def connected() -> bytes: ...
+    @staticmethod
+    def ping() -> bytes: ...
+    @staticmethod
+    def close() -> bytes: ...
+    def data(self, value: Any, id: str | None = None) -> bytes: ...
+    @staticmethod
+    def serialized_error(message: str, code_name: str) -> bytes: ...
+
 __all__ = [
     "CallResult",
     "Limits",
     "ParsedCall",
     "ParsedRequest",
+    "SseEncoder",
     "TrpcProtocolError",
     "__version__",
     "build_response",

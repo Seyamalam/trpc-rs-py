@@ -19,7 +19,7 @@ import json
 import re
 import sys
 import textwrap
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -39,7 +39,8 @@ from pydantic import (
     model_serializer,
 )
 
-from trpc_rs_py import Router, TRPCError, generate_types
+from trpc_rs_py import Router, TRPCError, generate_types, tracked
+from trpc_rs_py.streaming import Tracked
 from trpc_rs_py.validation import build_input_validator, build_output_validator
 
 TS_TESTS = Path(__file__).resolve().parent.parent / "clients" / "ts-tests"
@@ -1215,3 +1216,110 @@ def fixture_router() -> Router:
     from router_source import build_router
 
     return build_router()
+
+
+# --- Subscriptions ----------------------------------------------------------
+
+
+def test_subscription_emits_subscription_procedure() -> None:
+    router = Router()
+
+    @router.subscription
+    async def ticks() -> AsyncIterator[int]:
+        yield 0
+        raise NotImplementedError
+
+    source = generate_types(router)
+    assert "SubscriptionProcedure" in source
+    assert "output: AsyncIterable<number>;" in source
+    assert "input: undefined;" in source
+    # The subscription import is only emitted when subscriptions exist.
+    router2 = Router()
+
+    @router2.query
+    def health() -> bool:
+        return True
+
+    assert "SubscriptionProcedure" not in generate_types(router2)
+
+
+def test_subscription_tracked_items_become_tracked_data_shape() -> None:
+    router = Router()
+
+    @router.subscription
+    async def chat() -> AsyncIterator[Tracked[Tag]]:
+        yield tracked("0", Tag(label="x"))
+        raise NotImplementedError
+
+    source = generate_types(router)
+    assert "output: AsyncIterable<{ id: string; data: Tag; }>;" in source
+
+
+def test_subscription_bare_tracked_item_maps_to_unknown_data() -> None:
+    router = Router()
+
+    @router.subscription
+    async def stream() -> AsyncIterator[Tracked]:
+        yield tracked("0", 1)
+        raise NotImplementedError
+
+    assert "AsyncIterable<{ id: string; data: unknown; }>" in generate_types(router)
+
+
+def test_subscription_input_excludes_last_event_id() -> None:
+    router = Router()
+
+    @router.subscription
+    async def chat(room: str, lastEventId: str | None = None) -> AsyncIterator[int]:
+        yield 0
+        raise NotImplementedError
+
+    source = generate_types(router)
+    assert "lastEventId" not in source
+    assert "room: string;" in source
+
+
+def test_subscription_async_generator_return_maps_to_item() -> None:
+    router = Router()
+
+    @router.subscription
+    async def flow() -> AsyncGenerator[str, None]:
+        yield "x"
+        raise NotImplementedError
+
+    assert "AsyncIterable<string>" in generate_types(router)
+
+
+def test_subscription_union_of_tracked_and_plain_items() -> None:
+    router = Router()
+
+    @router.subscription
+    async def flow() -> AsyncIterator[Tracked[int] | str]:
+        yield "x"
+        raise NotImplementedError
+
+    source = generate_types(router)
+    assert "{ id: string; data: number; } | string" in source
+
+
+def test_subscription_sync_iterator_return_is_rejected() -> None:
+    router = Router()
+
+    @router.subscription
+    def bad() -> Iterator[int]:
+        yield 1
+        raise NotImplementedError
+
+    with pytest.raises(TypeError, match="async iterable"):
+        generate_types(router)
+
+
+def test_subscription_non_iterable_return_is_rejected() -> None:
+    router = Router()
+
+    @router.subscription
+    def bad() -> int:
+        return 1
+
+    with pytest.raises(TypeError, match="async iterable"):
+        generate_types(router)

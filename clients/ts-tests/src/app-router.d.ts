@@ -12,6 +12,7 @@ import type {
   MutationProcedure,
   QueryProcedure,
   Router,
+  SubscriptionProcedure,
   inferRouterInputs,
   inferRouterOutputs,
 } from "@trpc/server/unstable-core-do-not-import";
@@ -228,6 +229,24 @@ export interface Type_keywordProcedure
     errorShape: DefaultErrorShape;
   }> {}
 
+export interface TicksProcedure
+  extends SubscriptionProcedure<{
+    meta: unknown;
+    input: undefined;
+    output: AsyncIterable<number>;
+    errorShape: DefaultErrorShape;
+  }> {}
+
+export interface ChatProcedure
+  extends SubscriptionProcedure<{
+    meta: unknown;
+    input: {
+      room: string;
+    };
+    output: AsyncIterable<{ id: string; data: Post; }>;
+    errorShape: DefaultErrorShape;
+  }> {}
+
 export interface TreeBy_idProcedure
   extends QueryProcedure<{
     meta: unknown;
@@ -252,6 +271,8 @@ export type AppRouterRecord = {
   wire_alias: Wire_aliasProcedure;
   builtin_shadow: Builtin_shadowProcedure;
   type_keyword: Type_keywordProcedure;
+  ticks: TicksProcedure;
+  chat: ChatProcedure;
   tree: {
     by_id: TreeBy_idProcedure;
   };

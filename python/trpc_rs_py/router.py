@@ -28,10 +28,18 @@ import dataclasses
 import inspect
 import re
 import typing
-from collections.abc import Callable, Mapping
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterable,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Mapping,
+)
 from dataclasses import dataclass
 from enum import Enum
-from types import MappingProxyType
+from types import MappingProxyType, UnionType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 if TYPE_CHECKING:
@@ -50,7 +58,7 @@ _HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
 
 
 class ProcedureKind(Enum):
-    """Whether a procedure is a side-effect-free query or a mutation.
+    """Whether a procedure is a query, a mutation, or a subscription.
 
     Mirrors `ProcedureKind` in `crates/trpc-core/src/protocol.rs`; the string
     value is the lowercase wire name used by the code generators.
@@ -65,6 +73,7 @@ class ProcedureKind(Enum):
 
     QUERY = "query"
     MUTATION = "mutation"
+    SUBSCRIPTION = "subscription"
 
 
 @dataclass(frozen=True)
@@ -179,6 +188,127 @@ def _type_hints_of(handler: Callable[..., Any]) -> dict[str, Any]:
         return typing.get_type_hints(handler, include_extras=True)
     except (NameError, TypeError, ValueError):
         return dict(getattr(handler, "__annotations__", {}))
+
+
+# Origins accepted as a subscription handler's return annotation; the first
+# type argument is the yielded item type. `AsyncGenerator[T, S]` ignores the
+# send type, matching how the annotation maps to the item type `T`.
+_ASYNC_ITERABLE_ORIGINS = (AsyncIterator, AsyncIterable, AsyncGenerator)
+# Wrappers an `async def` handler may annotate when it returns a prebuilt
+# async iterable (`Awaitable[X]`; `Coroutine[*, *, X]` uses its last arg).
+_AWAITABLE_ORIGINS = (Awaitable, Coroutine)
+
+
+def _unwrap_awaitable(annotation: Any) -> Any:
+    """Strip `Annotated` and `Awaitable`/`Coroutine` wrappers from a return annotation.
+
+    Args:
+        annotation: A resolved return annotation object.
+
+    Returns:
+        The innermost annotation after `Annotated` metadata and at most one
+        `Awaitable`/`Coroutine` layer are removed.
+
+    Example:
+        ```python
+        from collections.abc import AsyncIterator
+
+        from trpc_rs_py.router import _unwrap_awaitable
+        from typing import Awaitable
+
+        assert _unwrap_awaitable(Awaitable[AsyncIterator[int]]) is AsyncIterator[int]
+        ```
+    """
+    while typing.get_origin(annotation) is typing.Annotated:
+        annotation = typing.get_args(annotation)[0]
+    if typing.get_origin(annotation) in _AWAITABLE_ORIGINS:
+        args = typing.get_args(annotation)
+        if args:
+            annotation = args[-1]
+        while typing.get_origin(annotation) is typing.Annotated:
+            annotation = typing.get_args(annotation)[0]
+    return annotation
+
+
+def unwrap_tracked(annotation: Any) -> Any:
+    """Replace `Tracked[X]` with `X`, recursively through unions and `Annotated`.
+
+    The SSE event id carried by `Tracked` is protocol metadata, never part of
+    the JSON payload, so the wire item type unwraps to `X`. A bare `Tracked`
+    (no type argument) becomes `Any` — the payload type is unknown.
+
+    Args:
+        annotation: An item annotation, possibly containing `Tracked[...]`.
+
+    Returns:
+        The annotation with every top-level `Tracked` wrapper removed —
+        applied through `Union` and `Annotated` members. `Tracked` nested
+        deeper (for example inside `list[Tracked[int]]`) is left untouched;
+        nothing can serialize or type that shape anyway.
+
+    Example:
+        ```python
+        from trpc_rs_py.router import unwrap_tracked
+        from trpc_rs_py.streaming import Tracked
+
+        assert unwrap_tracked(Tracked[int]) is int
+        ```
+    """
+    from .streaming import Tracked
+
+    if annotation is Tracked:
+        return Any
+    origin = typing.get_origin(annotation)
+    if origin is Tracked:
+        args = typing.get_args(annotation)
+        return args[0] if args else Any
+    if origin is typing.Annotated:
+        args = typing.get_args(annotation)
+        inner = unwrap_tracked(args[0])
+        if inner is args[0]:
+            return annotation
+        annotated_args = (inner, *args[1:])
+        return typing.Annotated[annotated_args]
+    if origin in (typing.Union, UnionType):
+        members = tuple(unwrap_tracked(arg) for arg in typing.get_args(annotation))
+        union: Any = members[0]
+        for member in members[1:]:
+            union |= member
+        return union
+    return annotation
+
+
+def subscription_item_annotation(annotation: Any) -> Any:
+    """Unwrap a subscription return annotation to the yielded wire item type.
+
+    Strips `Annotated` metadata, an optional `Awaitable`/`Coroutine` wrapper,
+    and the `AsyncIterator`/`AsyncIterable`/`AsyncGenerator` container, then
+    removes `Tracked` wrappers (see `unwrap_tracked`).
+
+    Args:
+        annotation: A resolved return annotation object.
+
+    Returns:
+        The wire item annotation, `Any` when the item type is unknown, or
+        `None` when the annotation does not describe an async iterable.
+
+    Example:
+        ```python
+        from collections.abc import AsyncIterator
+
+        from trpc_rs_py.router import subscription_item_annotation
+        from trpc_rs_py.streaming import Tracked
+
+        assert subscription_item_annotation(AsyncIterator[Tracked[int]]) is int
+        ```
+    """
+    unwrapped = _unwrap_awaitable(annotation)
+    if typing.get_origin(unwrapped) not in _ASYNC_ITERABLE_ORIGINS:
+        return None
+    args = typing.get_args(unwrapped)
+    if not args:
+        return Any
+    return unwrap_tracked(args[0])
 
 
 def _signature_of(handler: Callable[..., Any]) -> inspect.Signature | None:
@@ -434,6 +564,53 @@ class Router:
             ```
         """
         return self._register(ProcedureKind.MUTATION, args, name)
+
+    @overload
+    def subscription(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...
+
+    @overload
+    def subscription(
+        self, *, name: str | None = ...
+    ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
+
+    def subscription(self, *args: Any, name: str | None = None) -> Callable[..., Any]:
+        """Register a subscription procedure; usable bare or with a `name`.
+
+        The handler must return an async iterable (typically an `async def`
+        generator). Each yielded value becomes one SSE data event; yielding
+        `tracked(id, value)` marks the event with an id for client resume.
+        Subscriptions are served over GET only and cannot be batched —
+        matching the official v11 method table.
+
+        Args:
+            *args: The decorated function when used bare
+                (`@router.subscription`). At most one positional argument is
+                accepted.
+            name: Explicit procedure name; defaults to the function's
+                `__name__`.
+
+        Returns:
+            The function itself when used bare, otherwise a decorator.
+
+        Raises:
+            TypeError: If more than one positional argument is given.
+            ValueError: If the resulting path is invalid or already taken.
+
+        Example:
+            ```python
+            import asyncio
+            from collections.abc import AsyncIterator
+
+            from trpc_rs_py import Router
+
+            router = Router()
+
+            @router.subscription
+            async def ticks() -> AsyncIterator[int]:
+                yield 1
+            ```
+        """
+        return self._register(ProcedureKind.SUBSCRIPTION, args, name)
 
     def _register(
         self,

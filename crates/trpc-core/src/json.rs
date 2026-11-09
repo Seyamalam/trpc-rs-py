@@ -29,7 +29,14 @@ pub(crate) fn is_recursion_limit_error(error: &serde_json::Error) -> bool {
 }
 
 /// Serialize a value as compact JSON.
-pub(crate) fn serialize<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
+///
+/// Public so the bindings crate serializes event payloads through the same
+/// isolated JSON boundary per ADR 0002.
+///
+/// # Errors
+/// Returns the `serde_json` serialization error (e.g. a key that is not a
+/// string on a map — impossible for [`Value`], but possible for arbitrary `T`).
+pub fn serialize<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
     serde_json::to_string(value)
 }
 

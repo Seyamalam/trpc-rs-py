@@ -46,6 +46,7 @@ from .asgi import ASGIApp, attach, mount
 from .codegen import generate_types
 from .errors import TRPCError, TRPCErrorCode, data_code_for
 from .router import Procedure, ProcedureKind, Router
+from .streaming import Tracked, tracked
 from .validation import build_input_validator, build_output_validator
 
 try:
@@ -61,6 +62,7 @@ __all__ = [
     "Router",
     "TRPCError",
     "TRPCErrorCode",
+    "Tracked",
     "__version__",
     "attach",
     "build_input_validator",
@@ -68,4 +70,5 @@ __all__ = [
     "data_code_for",
     "generate_types",
     "mount",
+    "tracked",
 ]

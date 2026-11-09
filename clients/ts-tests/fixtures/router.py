@@ -2,14 +2,16 @@
 
 Procedures are deliberately tiny and cover every runtime case the official
 `@trpc/client` tests exercise: query, mutation, Pydantic-validated input,
-deliberate `TRPCError`, and an unexpected exception.
+deliberate `TRPCError`, an unexpected exception, and a tracked subscription.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from pydantic import BaseModel
 
-from trpc_rs_py import Router, TRPCError, TRPCErrorCode
+from trpc_rs_py import Router, TRPCError, TRPCErrorCode, Tracked, tracked
 
 
 class GreetingInput(BaseModel):
@@ -24,6 +26,10 @@ class GreetingOutput(BaseModel):
 class CreatedPost(BaseModel):
     title: str
     created: bool
+
+
+class Tick(BaseModel):
+    tick: int
 
 
 def build_fixture_router() -> Router:
@@ -58,5 +64,11 @@ def build_fixture_router() -> Router:
     @router.mutation
     def no_input() -> str:
         return "mutated"
+
+    @router.subscription
+    async def ticks(lastEventId: str | None = None) -> AsyncIterator[Tracked[Tick]]:
+        start = int(lastEventId) + 1 if lastEventId else 0
+        for index in range(start, start + 3):
+            yield tracked(str(index), Tick(tick=index))
 
     return router

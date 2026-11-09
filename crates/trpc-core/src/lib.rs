@@ -20,8 +20,9 @@
 #![deny(unsafe_code)]
 
 pub mod error;
-mod json;
+pub mod json;
 pub mod protocol;
+pub mod sse;
 
 /// Crate version, sourced from the workspace version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

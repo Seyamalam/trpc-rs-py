@@ -5,9 +5,9 @@
 
 ## Current version and milestone
 
-- Version: **0.1.0** (workspace `Cargo.toml`), milestone **0.1.0 Foundation** — in progress.
+- Version: **0.2.0 released** (`v0.2.0` tag pushed); milestone **0.3.0 Launch version** — in progress.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- Roadmap: 0.2.0 Core on FastAPI → **0.3.0 Launch version → STOP and ask user** → 0.4.0+ per user-approved plan.
+- Roadmap: 0.2.0 Core on FastAPI (done) → **0.3.0 Launch version → STOP and ask user** → 0.4.0+ per user-approved plan.
 
 ## What is done
 
@@ -245,24 +245,24 @@
 
 ## Next tasks in priority order
 
-1. Finish 0.1.0: benchmark harness skeleton (`benchmarks/README.md`, `plot.py`),
-   git hooks installed, docs skeleton, feature matrix skeleton — done as part
-   of the foundation commits.
-2. **0.2.0 Core on FastAPI:** tasks A–G complete (Rust protocol,
-   Python Router/errors, PyO3 batch boundary, ASGI adapter, Pydantic v2
-   validation, `generate_types` codegen, official-client runtime suite +
-   fastapi-basic example). First benchmark suite run and recorded
-   (results/plots/headline numbers committed). Remaining:
-   a. Commit + push the working tree after full gate green.
-   b. Bump to 0.2.0, `chore(release): v0.2.0`, annotated tag, push.
-3. Then begin 0.3.0 launch work (live types, AI streaming, OpenAPI/REST,
-   starter); stop at launch and ask user to publish/report feedback.
+1. **0.3.0 in progress.** SSE subscriptions implemented end to end
+   (Rust `SseEncoder`, `@router.subscription` + `tracked`, ASGI streaming with
+   disconnect cancellation, codegen `SubscriptionProcedure`, official-client
+   runtime tests on both adapters) — landing as conventional commits.
+2. Remaining 0.3.0 work: `trpc-py dev` live type sync (argparse CLI per
+   ADR 0006), OpenAPI/REST output (ADR 0005), `trpc-py init` starter,
+   examples + launch materials. Stop at launch and ask user to publish.
 
 ## Open questions
 
 - Pydantic as hard dependency vs optional extra (ADR 0003 keeps it core for now).
 - superjson/transformer support order (not scheduled before 0.3.0).
-- OpenAPI-in-FastAPI-app integration decision (needed for 0.3.0; ADR planned).
+- JSONL stream calls (`trpc-accept: application/jsonl`) recognized but JSONL
+  responses unimplemented — batched stream calls get JSON envelopes.
+- Subagent-model rule: required GPT 6 Luna / GLM 5.3 Flash delegation is not
+  reachable in this environment (`run_subagent` exposes other profiles only;
+  `servers` MCP errors). SSE work proceeded without substituting models;
+  re-check availability each session.
 - serde_json silently degrades input integer literals beyond the u64 range to
   floats (documented on `ParsedCall.input`); follow up with
   `arbitrary_precision` or core-level rejection before 1.0 (filed from task C

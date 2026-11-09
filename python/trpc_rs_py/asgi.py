@@ -54,13 +54,22 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 from collections.abc import Awaitable, Callable, Iterable, Mapping, MutableMapping
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
-from ._core import CallResult, Limits, TrpcProtocolError, build_response, parse_request
+from ._core import (
+    CallResult,
+    Limits,
+    SseEncoder,
+    TrpcProtocolError,
+    build_response,
+    parse_request,
+)
 from .errors import TRPCError, TRPCErrorCode, data_code_for
 from .router import Procedure, ProcedureKind, Router
+from .streaming import Tracked
 from .validation import (
     InputValidator,
     OutputValidator,
@@ -106,6 +115,17 @@ _HTTP_STATUSES: Mapping[TRPCErrorCode, int] = {
 }
 
 _PRODUCTION_INTERNAL_MESSAGE = "Internal server error"
+
+# Response headers for subscription streams, mirroring the official
+# `sseHeaders` in @trpc/server 11.25.0.
+_SSE_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"content-type", b"text/event-stream"),
+    (b"cache-control", b"no-cache, no-transform"),
+    (b"x-accel-buffering", b"no"),
+    (b"connection", b"keep-alive"),
+)
+
+_DEFAULT_MAX_SSE_EVENT_SIZE = 1024 * 1024
 
 
 class _BodyTooLarge(Exception):
@@ -458,6 +478,357 @@ async def _send_response(send: Send, status: int, body: str) -> None:
     await send({"type": "http.response.body", "body": payload})
 
 
+def _query_param(query_string: bytes, name: bytes) -> bytes | None:
+    """Return the first query parameter value matching `name`, undecoded.
+
+    Args:
+        query_string: Raw ASGI query string without the leading `?`.
+        name: Parameter name, e.g. `b"lastEventId"`.
+
+    Returns:
+        The raw (still percent-encoded) value, or `None` when absent.
+
+    Example:
+        ```python
+        from trpc_rs_py._asgi import _query_param
+
+        assert _query_param(b"a=1&lastEventId=5", b"lastEventId") == b"5"
+        ```
+    """
+    for part in query_string.split(b"&"):
+        key, separator, value = part.partition(b"=")
+        if separator and key == name:
+            return value
+    return None
+
+
+def _extract_last_event_id(scope: Any) -> bytes | None:
+    """Extract the client's resume id in official precedence order.
+
+    Mirrors `getLastEventId` in `@trpc/server` 11.25.0: the `last-event-id`
+    header wins, then the `lastEventId` and `Last-Event-Id` query parameters.
+
+    Args:
+        scope: Raw ASGI scope for an `http` request.
+
+    Returns:
+        The raw last-event-id bytes, or `None` when the request carries none.
+
+    Example:
+        ```python
+        from trpc_rs_py._asgi import _extract_last_event_id
+
+        scope = {"headers": [(b"last-event-id", b"9")], "query_string": b""}
+        assert _extract_last_event_id(scope) == b"9"
+        ```
+    """
+    header = _header(scope.get("headers", []), b"last-event-id")
+    if header is not None:
+        return header
+    query_string: bytes = scope.get("query_string", b"")
+    return _query_param(query_string, b"lastEventId") or _query_param(
+        query_string, b"Last-Event-Id"
+    )
+
+
+async def _wait_disconnect(receive: Receive) -> None:
+    """Block until the ASGI server reports `http.disconnect`.
+
+    Other receive events (for example a stray `http.request` body frame on a
+    GET request) are ignored; only the disconnect matters while streaming.
+
+    Args:
+        receive: ASGI receive callable.
+
+    Returns:
+        `None` once the client has disconnected.
+    """
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return
+
+
+async def _send_sse_body(send: Send, payload: bytes) -> bool:
+    """Send one SSE chunk, reporting whether the socket accepted it.
+
+    Args:
+        send: ASGI send callable.
+        payload: Encoded SSE bytes (empty bytes ends the response body).
+
+    Returns:
+        `True` when the chunk was sent; `False` when the transport rejected
+        it, which the caller treats as client disconnect.
+    """
+    try:
+        await send({"type": "http.response.body", "body": payload, "more_body": bool(payload)})
+    except (ConnectionError, OSError, RuntimeError):
+        return False
+    return True
+
+
+async def _close_iterator(iterator: Any) -> None:
+    """Best-effort `aclose()` of an async iterator after client disconnect.
+
+    Closing throws `GeneratorExit` into a suspended generator so an in-flight
+    `await` (for example an LLM streaming call) stops promptly instead of
+    running to completion unseen. Iterators without `aclose` are skipped;
+    close failures are deliberately swallowed — the client is already gone.
+
+    Args:
+        iterator: The async iterator being closed.
+
+    Returns:
+        `None` after the close attempt finishes.
+    """
+    aclose = getattr(iterator, "aclose", None)
+    if aclose is None:
+        return
+    try:
+        await asyncio.wait_for(aclose(), timeout=5.0)
+    except Exception:  # client is gone; close failures are irrelevant
+        return
+
+
+def _declares_last_event_id(handler: Callable[..., Any]) -> bool:
+    """Return whether the handler signature has a `lastEventId` parameter.
+
+    Args:
+        handler: The subscription handler.
+
+    Returns:
+        `True` when a parameter literally named `lastEventId` exists; the
+        adapter passes the client's resume id through it.
+
+    Example:
+        ```python
+        from trpc_rs_py._asgi import _declares_last_event_id
+
+        def stream(lastEventId: str | None = None) -> None: ...
+
+        assert _declares_last_event_id(stream)
+        ```
+    """
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return False
+    return "lastEventId" in signature.parameters
+
+
+async def _serve_subscription(
+    scope: Any,
+    receive: Receive,
+    send: Send,
+    *,
+    procedure: Procedure,
+    input_value: Any,
+    last_event_id: bytes | None,
+    method: str,
+    production: bool,
+    validators: tuple[InputValidator | None, OutputValidator | None] | None,
+    sse_ping_interval: float | None,
+    max_sse_event_size: int,
+) -> None:
+    """Stream one subscription procedure over SSE in the official v11 format.
+
+    Event order mirrors `@trpc/server` 11.25.0 `sseStreamProducer`: the
+    `connected` frame always leads, then one data frame per yielded value
+    (tracked events carry `id:`), `serialized-error` for any failure, `return`
+    on a clean end, and `ping` frames when `sse_ping_interval` is configured.
+    Backpressure is pull-based: one generator item is awaited, encoded, and
+    sent before the next is pulled, so a slow client never grows a buffer
+    beyond `max_sse_event_size`. On `http.disconnect` the pending
+    `__anext__` is cancelled and the iterator is closed, which stops
+    in-flight work inside the generator (for example an LLM call).
+
+    Args:
+        scope: Raw ASGI scope for an `http` request.
+        receive: ASGI receive callable.
+        send: ASGI send callable.
+        procedure: The subscription procedure to stream.
+        input_value: Decoded JSON input (`lastEventId` already removed).
+        last_event_id: The client's resume id from header/query param, raw.
+        method: HTTP method of the request.
+        production: When `True`, internal failures never leak details.
+        validators: Optional pair of prebuilt input and output validators.
+        sse_ping_interval: Seconds between `ping` frames when the generator
+            is idle, or `None` to disable keep-alives (the default).
+        max_sse_event_size: Largest single encoded frame in bytes; a yielded
+            value serializing beyond it ends the stream with an error.
+
+    Returns:
+        `None` when the stream has ended or the client went away.
+    """
+    path = procedure.path
+
+    async def fail(message: str, code: TRPCErrorCode) -> None:
+        """Emit `serialized-error` with the flat v11 error shape, then end."""
+        await _send_sse_body(send, SseEncoder.serialized_error(message, code.value))
+
+    try:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": list(_SSE_HEADERS),
+            }
+        )
+    except (ConnectionError, OSError, RuntimeError):
+        return
+    if not await _send_sse_body(send, SseEncoder.connected()):
+        return
+
+    if method.upper() not in ("GET", "POST"):
+        await fail(
+            f'Procedure "{path}" is a subscription and only supports GET or POST',
+            TRPCErrorCode.METHOD_NOT_SUPPORTED,
+        )
+        return
+
+    # The official client merges `lastEventId` into the input object on
+    # reconnect; handlers may instead declare a `lastEventId` parameter and
+    # receive it directly — either way the value is protocol metadata, not
+    # user input, so it is removed before validation.
+    effective_last_event_id = last_event_id
+    if isinstance(input_value, dict) and "lastEventId" in input_value:
+        input_value = dict(cast("dict[str, Any]", input_value))
+        effective_last_event_id = effective_last_event_id or input_value.pop("lastEventId")
+
+    input_validator, output_validator = validators or (None, None)
+    try:
+        if input_validator is not None:
+            args, kwargs = input_validator(input_value)
+        else:
+            if not _input_fits_signature(procedure.handler, input_value):
+                raise TRPCError(
+                    f"Invalid input for procedure {path}", code=TRPCErrorCode.BAD_REQUEST
+                )
+            args, kwargs = (), {}
+            if input_value is None:
+                pass
+            elif isinstance(input_value, dict):
+                kwargs = dict(cast("dict[str, Any]", input_value))
+            else:
+                args = (input_value,)
+        if _declares_last_event_id(procedure.handler):
+            kwargs["lastEventId"] = (
+                effective_last_event_id.decode("utf-8", errors="replace")
+                if isinstance(effective_last_event_id, bytes)
+                else effective_last_event_id
+            )
+        result = procedure.handler(*args, **kwargs)
+    except TRPCError as error:
+        message = error.message
+        if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
+            message = _PRODUCTION_INTERNAL_MESSAGE
+        await fail(message, error.code)
+        return
+    except Exception as error:  # adapter boundary: failures stream as serialized-error
+        message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
+        await fail(message, TRPCErrorCode.INTERNAL_SERVER_ERROR)
+        return
+
+    iterator: Any = None
+    if hasattr(result, "__aiter__"):
+        iterator = result.__aiter__()
+    elif hasattr(result, "__anext__"):
+        iterator = result
+    if iterator is None or not hasattr(iterator, "__anext__"):
+        await fail(
+            f"Subscription {path} did not return an observable or a AsyncGenerator",
+            TRPCErrorCode.INTERNAL_SERVER_ERROR,
+        )
+        return
+
+    resume_text: str | None = None
+    if effective_last_event_id is not None:
+        resume_text = (
+            effective_last_event_id.decode("utf-8", errors="replace")
+            if isinstance(effective_last_event_id, bytes)
+            else str(effective_last_event_id)
+        )
+    encoder = SseEncoder(resume_text)
+    disconnect_waiter = asyncio.ensure_future(_wait_disconnect(receive))
+    anext_task: asyncio.Task[Any] = asyncio.ensure_future(iterator.__anext__())
+    try:
+        while True:
+            done, _ = await asyncio.wait(
+                {anext_task, disconnect_waiter},
+                timeout=sse_ping_interval,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if disconnect_waiter in done:
+                anext_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await anext_task
+                await _close_iterator(iterator)
+                return
+            if anext_task not in done:
+                # Idle interval elapsed: keep-alive ping, the same pending
+                # __anext__ stays in flight — never pull ahead of the client.
+                if not await _send_sse_body(send, SseEncoder.ping()):
+                    return
+                continue
+            try:
+                value = anext_task.result()
+            except StopAsyncIteration:
+                await _send_sse_body(send, SseEncoder.close())
+                return
+            except TRPCError as error:
+                message = error.message
+                if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
+                    message = _PRODUCTION_INTERNAL_MESSAGE
+                await fail(message, error.code)
+                return
+            except Exception as error:  # generator raised mid-stream
+                message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
+                await fail(message, TRPCErrorCode.INTERNAL_SERVER_ERROR)
+                return
+
+            event_id: str | None = None
+            data: Any = value
+            if isinstance(value, Tracked):
+                event_id = value.id
+                data = cast(Any, value).data
+            if output_validator is not None:
+                try:
+                    data = output_validator(data)
+                except Exception:
+                    message = (
+                        _PRODUCTION_INTERNAL_MESSAGE
+                        if production
+                        else "Invalid output from procedure"
+                    )
+                    await fail(message, TRPCErrorCode.INTERNAL_SERVER_ERROR)
+                    return
+            try:
+                frame = encoder.data(data, event_id)
+            except Exception as error:
+                message = _PRODUCTION_INTERNAL_MESSAGE if production else repr(error)
+                await fail(message, TRPCErrorCode.INTERNAL_SERVER_ERROR)
+                return
+            if len(frame) > max_sse_event_size:
+                message = (
+                    _PRODUCTION_INTERNAL_MESSAGE
+                    if production
+                    else f"Event on {path} exceeds the SSE size limit"
+                )
+                await fail(message, TRPCErrorCode.INTERNAL_SERVER_ERROR)
+                return
+            if not await _send_sse_body(send, frame):
+                return
+            anext_task = asyncio.ensure_future(iterator.__anext__())
+    finally:
+        if not anext_task.done():
+            anext_task.cancel()
+        disconnect_waiter.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await disconnect_waiter
+        with contextlib.suppress(ConnectionError, OSError, RuntimeError):
+            await send({"type": "http.response.body", "body": b""})
+
+
 def _limits_or_default(limits: Limits | None) -> Limits:
     """Return `limits`, or the protocol defaults when `None`.
 
@@ -488,6 +859,8 @@ async def _serve_trpc(
     production: bool,
     procedure_path: str,
     validators: Mapping[str, tuple[InputValidator | None, OutputValidator | None]],
+    sse_ping_interval: float | None,
+    max_sse_event_size: int,
 ) -> None:
     """Parse, dispatch, and answer one HTTP request against the router.
 
@@ -508,6 +881,9 @@ async def _serve_trpc(
         procedure_path: Dotted procedure path extracted from the URL.
         validators: Validators built once at adapter construction for each
             registered procedure; later registrations use legacy checks.
+        sse_ping_interval: Seconds between SSE `ping` frames on idle
+            subscription streams, or `None` to disable keep-alives.
+        max_sse_event_size: Largest single encoded SSE frame in bytes.
 
     Returns:
         `None`. The response has been sent when this coroutine finishes.
@@ -522,10 +898,53 @@ async def _serve_trpc(
     """
     method: str = scope["method"]
 
-    status, body = _error_response_body(
-        "HTTP method not supported", TRPCErrorCode.METHOD_NOT_SUPPORTED
-    )
     if method.upper() not in ("GET", "POST"):
+        # The official resolves the procedure first and checks the method per
+        # call, so a batch reports one envelope per call and a single
+        # unbatched subscription streams the failure as `serialized-error`.
+        early_query: bytes = scope.get("query_string", b"")
+        batched = _query_param(early_query, b"batch") == b"1"
+        if not batched:
+            if not procedure_path:
+                status, body = _error_response_body(
+                    "Procedure path is empty", TRPCErrorCode.BAD_REQUEST
+                )
+                await _send_response(send, status, body)
+                return
+            if "," in procedure_path:
+                status, body = _error_response_body(
+                    "Batch flag and procedure paths do not match", TRPCErrorCode.BAD_REQUEST
+                )
+                await _send_response(send, status, body)
+                return
+            procedure = router.procedures.get(procedure_path)
+            if procedure is not None and procedure.kind is ProcedureKind.SUBSCRIPTION:
+                await _serve_subscription(
+                    scope,
+                    receive,
+                    send,
+                    procedure=procedure,
+                    input_value=None,
+                    last_event_id=_extract_last_event_id(scope),
+                    method=method,
+                    production=production,
+                    validators=None,
+                    sse_ping_interval=sse_ping_interval,
+                    max_sse_event_size=max_sse_event_size,
+                )
+                return
+        bad_method_results = [
+            _error_result(TRPCErrorCode.NOT_FOUND, f'No procedure found on path "{call_path}"')
+            if (procedure := router.procedures.get(call_path)) is None
+            else _error_result(
+                TRPCErrorCode.METHOD_NOT_SUPPORTED,
+                f'Procedure "{call_path}" is a {procedure.kind.value}'
+                " and only supports "
+                + ("POST" if procedure.kind is ProcedureKind.MUTATION else "GET or POST"),
+            )
+            for call_path in procedure_path.split(",")
+        ]
+        status, body = build_response(bad_method_results, batched)
         await _send_response(send, status, body)
         return
 
@@ -603,6 +1022,59 @@ async def _serve_trpc(
         return
 
     procedures = router.procedures
+    # `trpc-accept: application/jsonl` (or an `accept` entry for it) marks an
+    # official stream call, which must be batched — the check runs before
+    # method and procedure dispatch. JSONL responses themselves are not
+    # implemented; batched stream calls still get JSON envelopes.
+    trpc_accept = _header(headers, b"trpc-accept")
+    accept = _header(headers, b"accept")
+    if trpc_accept == b"application/jsonl" or (
+        accept is not None and b"application/jsonl" in (part.strip() for part in accept.split(b","))
+    ):
+        if not parsed.batched:
+            status, body = _error_response_body(
+                "Streaming requests must be batched (you can do a batch of 1)",
+                TRPCErrorCode.BAD_REQUEST,
+            )
+            await _send_response(send, status, body)
+            return
+    elif not parsed.batched and len(parsed.calls) == 1:
+        call = parsed.calls[0]
+        procedure = procedures.get(call.path)
+        if procedure is not None and procedure.kind is ProcedureKind.SUBSCRIPTION:
+            await _serve_subscription(
+                scope,
+                receive,
+                send,
+                procedure=procedure,
+                input_value=call.input,
+                last_event_id=_extract_last_event_id(scope),
+                method=method,
+                production=production,
+                validators=validators.get(call.path),
+                sse_ping_interval=sse_ping_interval,
+                max_sse_event_size=max_sse_event_size,
+            )
+            return
+
+    # Mirror the official request-info rule before any call runs: a batch may
+    # never mix procedure kinds (unknown paths contribute no kind). The
+    # official error is thrown during request parsing, so it surfaces as one
+    # top-level error envelope rather than per-call results.
+    seen_kinds: list[ProcedureKind] = []
+    for call in parsed.calls:
+        procedure = procedures.get(call.path)
+        if procedure is not None and procedure.kind not in seen_kinds:
+            seen_kinds.append(procedure.kind)
+    if len(seen_kinds) > 1:
+        type_names = ", ".join(kind.value for kind in seen_kinds)
+        status, body = _error_response_body(
+            f"Cannot mix procedure types in call: {type_names}",
+            TRPCErrorCode.BAD_REQUEST,
+        )
+        await _send_response(send, status, body)
+        return
+
     results: list[CallResult] = []
     for call in parsed.calls:
         procedure = procedures.get(call.path)
@@ -621,6 +1093,25 @@ async def _serve_trpc(
                 )
             )
             continue
+        if procedure.kind is ProcedureKind.SUBSCRIPTION:
+            # A subscription reaching this loop is necessarily batched; the
+            # official checks the method first, then rejects the batch —
+            # both as per-call JSON error envelopes.
+            if method.upper() not in ("GET", "POST"):
+                results.append(
+                    _error_result(
+                        TRPCErrorCode.METHOD_NOT_SUPPORTED,
+                        f'Procedure "{call.path}" is a subscription and only supports GET or POST',
+                    )
+                )
+            else:
+                results.append(
+                    _error_result(
+                        TRPCErrorCode.BAD_REQUEST,
+                        "Cannot batch subscription calls",
+                    )
+                )
+            continue
         results.append(
             await _run_call(procedure, call.input, production, validators.get(call.path))
         )
@@ -635,6 +1126,8 @@ def mount(
     path: str = "/trpc",
     limits: Limits | None = None,
     production: bool = False,
+    sse_ping_interval: float | None = None,
+    max_sse_event_size: int = _DEFAULT_MAX_SSE_EVENT_SIZE,
 ) -> ASGIApp:
     """Return a standalone ASGI app serving `router` as tRPC v11 endpoints.
 
@@ -667,6 +1160,11 @@ def mount(
             defaults when `None`.
         production: See the production error policy above; `False` (default)
             is for development.
+        sse_ping_interval: Seconds between SSE `ping` keep-alive frames while
+            a subscription generator is idle, or `None` (default) to disable
+            keep-alives — the same default as the official server.
+        max_sse_event_size: Largest single encoded SSE frame in bytes before
+            the stream ends with an error; defaults to 1 MiB.
 
     Returns:
         An ASGI application (`Callable[[Scope, Receive, Send], Awaitable[None]]`).
@@ -691,7 +1189,12 @@ def mount(
     # Build validators once for procedures registered at construction. Later
     # registrations use the legacy signature pre-check.
     validators = {
-        name: (build_input_validator(proc.handler), build_output_validator(proc.handler))
+        name: (
+            build_input_validator(proc.handler),
+            build_output_validator(
+                proc.handler, for_subscription=proc.kind is ProcedureKind.SUBSCRIPTION
+            ),
+        )
         for name, proc in router.procedures.items()
     }
 
@@ -708,6 +1211,8 @@ def mount(
                 production=production,
                 procedure_path=_procedure_path(scope, path),
                 validators=validators,
+                sse_ping_interval=sse_ping_interval,
+                max_sse_event_size=max_sse_event_size,
             )
         elif scope_type == "websocket":
             # A standalone adapter has nothing to hand a websocket to; close
@@ -733,6 +1238,8 @@ def attach(
     path: str = "/trpc",
     limits: Limits | None = None,
     production: bool = False,
+    sse_ping_interval: float | None = None,
+    max_sse_event_size: int = _DEFAULT_MAX_SSE_EVENT_SIZE,
 ) -> ASGIApp:
     """Wrap an existing ASGI app so `router` serves the tRPC prefix.
 
@@ -761,6 +1268,11 @@ def attach(
             defaults when `None`.
         production: See the production error policy above; `False` (default)
             is for development.
+        sse_ping_interval: Seconds between SSE `ping` keep-alive frames while
+            a subscription generator is idle, or `None` (default) to disable
+            keep-alives — the same default as the official server.
+        max_sse_event_size: Largest single encoded SSE frame in bytes before
+            the stream ends with an error; defaults to 1 MiB.
 
     Returns:
         A new ASGI application wrapping `app`.
@@ -785,7 +1297,12 @@ def attach(
     # Build validators once for procedures registered at construction. Later
     # registrations use the legacy signature pre-check.
     validators = {
-        name: (build_input_validator(proc.handler), build_output_validator(proc.handler))
+        name: (
+            build_input_validator(proc.handler),
+            build_output_validator(
+                proc.handler, for_subscription=proc.kind is ProcedureKind.SUBSCRIPTION
+            ),
+        )
         for name, proc in router.procedures.items()
     }
 
@@ -801,6 +1318,8 @@ def attach(
                 production=production,
                 procedure_path=_procedure_path(scope, path),
                 validators=validators,
+                sse_ping_interval=sse_ping_interval,
+                max_sse_event_size=max_sse_event_size,
             )
             return
         await app(scope, receive, send)

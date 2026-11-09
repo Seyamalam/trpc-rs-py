@@ -55,6 +55,8 @@ pub enum ProcedureKind {
     Query,
     /// State-changing mutation.
     Mutation,
+    /// Server-sent event stream; GET-only like a query but answered as SSE.
+    Subscription,
 }
 
 /// One procedure call after parsing the HTTP request.
@@ -349,10 +351,13 @@ impl Router {
                 format!("No procedure found on path \"{path}\""),
             )
         })?;
-        // Mutations remain POST-only; queries also accept POST for client method overrides.
+        // Mutations remain POST-only; queries also accept POST for client method
+        // overrides; subscriptions are GET-only like the official method table.
         let allowed = matches!(
             (method, procedure.kind),
-            (_, ProcedureKind::Query) | (HttpMethod::Post, ProcedureKind::Mutation)
+            (_, ProcedureKind::Query)
+                | (HttpMethod::Post, ProcedureKind::Mutation)
+                | (HttpMethod::Get, ProcedureKind::Subscription)
         );
         if !allowed {
             return Err(TrpcError::new(

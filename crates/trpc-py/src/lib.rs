@@ -28,6 +28,7 @@ mod ffi {
     use trpc_core::{
         error::{ErrorCode, TrpcError},
         protocol::{self, HttpMethod, Request},
+        sse,
     };
 
     create_exception!(trpc_rs_py._core, TrpcProtocolError, PyException);
@@ -177,6 +178,94 @@ mod ffi {
             Ok(Self {
                 result: Err(TrpcError::new(parsed, message)),
             })
+        }
+    }
+
+    /// Stateful per-stream SSE encoder for one subscription response.
+    ///
+    /// Mirrors `@trpc/server` 11.25.0 `sseStreamProducer`: `connected` first,
+    /// data frames (tracked with an `id` line when `id` is given), `ping`,
+    /// `return`, and `serialized-error` carrying the flat v11 error shape.
+    /// Untracked events emitted after an event id is known get an empty `id`
+    /// line followed by a `restore-id` frame, exactly like upstream.
+    ///
+    /// Not thread-safe to construct concurrently in user code; the adapter
+    /// creates one per request.
+    #[pyclass(module = "trpc_rs_py._core", name = "SseEncoder")]
+    pub struct PySseEncoder {
+        inner: std::sync::Mutex<sse::SseEncoder>,
+    }
+
+    #[pymethods]
+    impl PySseEncoder {
+        /// Create an encoder; `last_event_id` is the reconnecting client's id.
+        #[new]
+        #[pyo3(signature = (last_event_id=None))]
+        fn new(last_event_id: Option<String>) -> Self {
+            Self {
+                inner: std::sync::Mutex::new(sse::SseEncoder::new(last_event_id)),
+            }
+        }
+
+        /// The `connected` frame sent before any data on every stream.
+        #[staticmethod]
+        fn connected() -> &'static [u8] {
+            sse::CONNECTED_FRAME.as_bytes()
+        }
+
+        /// A `ping` keep-alive frame.
+        #[staticmethod]
+        fn ping() -> &'static [u8] {
+            sse::PING_FRAME.as_bytes()
+        }
+
+        /// The `return` frame that ends a stream cleanly.
+        #[staticmethod]
+        fn close() -> &'static [u8] {
+            sse::RETURN_FRAME.as_bytes()
+        }
+
+        /// Encode one yielded JSON-ready value as a data frame.
+        ///
+        /// `id` marks the event tracked and advances the resume point.
+        #[pyo3(signature = (value, id=None))]
+        fn data(
+            &self,
+            py: Python<'_>,
+            value: &Bound<'_, PyAny>,
+            id: Option<&str>,
+        ) -> PyResult<Vec<u8>> {
+            let json = python_to_json_value(value, 0)?;
+            let id = id.map(str::to_owned);
+            let frame = py.detach(move || {
+                let text = trpc_core::json::serialize(&json).map_err(|serde_error| {
+                    TrpcError::new(
+                        ErrorCode::InternalServerError,
+                        format!("failed to serialize event data: {serde_error}"),
+                    )
+                })?;
+                self.inner
+                    .lock()
+                    .map_err(|_| {
+                        TrpcError::new(ErrorCode::InternalServerError, "encoder lock poisoned")
+                    })?
+                    .data(&text, id.as_deref())
+            });
+            match frame {
+                Ok(frame) => Ok(frame.into_bytes()),
+                Err(error) => Err(protocol_exception(py, error)?),
+            }
+        }
+
+        /// Encode a `serialized-error` frame for an official error code name.
+        #[staticmethod]
+        fn serialized_error(message: &str, code_name: &str) -> PyResult<Vec<u8>> {
+            let code = ErrorCode::from_name(code_name).ok_or_else(|| {
+                PyValueError::new_err(format!("unsupported tRPC error code: {code_name}"))
+            })?;
+            sse::SseEncoder::serialized_error(&TrpcError::new(code, message))
+                .map(String::into_bytes)
+                .map_err(|error| PyValueError::new_err(error.message))
         }
     }
 
@@ -388,6 +477,7 @@ mod ffi {
         m.add_class::<PyParsedCall>()?;
         m.add_class::<PyParsedRequest>()?;
         m.add_class::<PyCallResult>()?;
+        m.add_class::<PySseEncoder>()?;
         m.add_function(wrap_pyfunction!(parse_request, m)?)?;
         m.add_function(wrap_pyfunction!(build_response, m)?)?;
         Ok(())

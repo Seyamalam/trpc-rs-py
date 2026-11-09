@@ -15,7 +15,9 @@ import {
   createTRPCClient,
   createTRPCUntypedClient,
   httpBatchLink,
+  httpSubscriptionLink,
 } from "@trpc/client";
+import { EventSource } from "eventsource";
 
 import type { AppRouter } from "../fixtures/app-router";
 
@@ -261,6 +263,54 @@ for (const framework of ["fastapi", "starlette"] as const) {
       assert.equal(envelope.error.code, -32005);
       assert.equal(envelope.error.data.code, "METHOD_NOT_SUPPORTED");
       assert.equal(envelope.error.data.httpStatus, 405);
+    });
+
+    it("subscription streams tracked events over SSE and completes", async () => {
+      // The official httpSubscriptionLink drives a real EventSource against
+      // the Python server: tracked yields arrive as {id, data} values and the
+      // stream ends when the generator returns.
+      const subClient = createTRPCClient<AppRouter>({
+        links: [
+          httpSubscriptionLink({
+            url: `${ctx.server.baseUrl}/trpc`,
+            EventSource,
+          }),
+        ],
+      });
+      const seen: Array<{ id: string; data: { tick: number } }> = [];
+      await new Promise<void>((resolve, reject) => {
+        subClient.ticks.subscribe(undefined, {
+          onData: (value) => {
+            seen.push(value);
+          },
+          onError: reject,
+          onComplete: resolve,
+        });
+      });
+      assert.deepEqual(
+        seen.map((event) => event.data.tick),
+        [0, 1, 2],
+      );
+      assert.deepEqual(
+        seen.map((event) => event.id),
+        ["0", "1", "2"],
+      );
+    });
+
+    it("subscription via async iteration yields the same events", async () => {
+      const subClient = createTRPCClient<AppRouter>({
+        links: [
+          httpSubscriptionLink({
+            url: `${ctx.server.baseUrl}/trpc`,
+            EventSource,
+          }),
+        ],
+      });
+      const ticks: number[] = [];
+      for await (const event of subClient.ticks.subscribe(undefined)) {
+        ticks.push(event.data.tick);
+      }
+      assert.deepEqual(ticks, [0, 1, 2]);
     });
   });
 }

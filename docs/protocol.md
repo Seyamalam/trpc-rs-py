@@ -87,16 +87,51 @@ table in `crates/trpc-core/src/error.rs`).
 
 ## Subscriptions
 
-Not implemented yet (milestone 0.3.0): `httpSubscriptionLink` over SSE, with
-`trpc-accept: application/jsonl` streaming and tracked events. The official
-client's `httpBatchLink` and `httpBatchStreamLink` throw on subscription
-operations, so no server-side behavior is exercised.
+Subscription procedures stream over Server-Sent Events when called through
+the official `httpSubscriptionLink` (GET, `EventSource`). The frame layout
+matches `@trpc/server` byte-for-byte:
+
+- On connect: `event: connected` with `data: {}`.
+- Each yielded value: a default `message` event carrying
+  `data: <compact JSON>`. `tracked(id, value)` yields add `id: <event id>`;
+  the client reports it back as `lastEventId` on reconnect (via the
+  `last-event-id` header or merged into the input object — handlers may
+  declare a `lastEventId` parameter to receive it, and it is stripped from
+  the validated input either way).
+- An untracked yield after a tracked one emits an empty `id:` followed by a
+  `restore-id` data event, matching the official resume-tracking behavior.
+- Idle streams emit `event: ping` every `sse_ping_interval` seconds
+  (disabled by default); clean generator completion sends `event: return`.
+- Handler and validation failures send `event: serialized-error` with the
+  flat tRPC error shape (`message`, `code`, `data.code`, `data.httpStatus`),
+  then end the stream.
+- Responses use the official headers: `Content-Type: text/event-stream`,
+  `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`,
+  `Connection: keep-alive`.
+
+Subscriptions accept GET and POST (the adapter runs with the official
+`allowMethodOverride` semantics, matching queries); any other method ends
+the stream with a `serialized-error` `METHOD_NOT_SUPPORTED` for a single
+call. Subscriptions cannot be batched: a subscription call inside a batch
+answers with a per-call `METHOD_NOT_SUPPORTED`/`BAD_REQUEST` JSON envelope,
+and a batch mixing procedure types is rejected at the top level — both
+matching the official server. Client disconnect (`http.disconnect`) cancels
+the pending `__anext__` and `aclose()`s the generator, so in-flight producer
+work (for example an LLM call) stops. `max_sse_event_size` caps a single
+encoded frame.
+
+Stream calls over `trpc-accept: application/jsonl` are recognized but JSONL
+responses are not implemented: an unbatched stream call is rejected at the
+top level (`Streaming requests must be batched`, matching the official
+server), and a batched stream call gets ordinary JSON envelopes rather than
+a JSONL stream.
 
 ## Runtime compatibility status
 
-The task G runtime suite exercises the official `@trpc/client` 11.25.0 against
-live FastAPI and Starlette servers: 28 tests (14 cases per adapter), all
-passing. It confirmed that the server emits the flat error envelope above,
+The runtime suite exercises the official `@trpc/client` 11.25.0 against
+live FastAPI and Starlette servers: 32 tests (16 cases per adapter), all
+passing, including `httpSubscriptionLink` SSE subscriptions with tracked
+event ids and async iteration. It confirmed that the server emits the flat error envelope above,
 that omitted batch indexes are interpreted as `null`/no-input, and that
 method enforcement is per call. Those behaviors are covered by the Rust,
 Python, and live client tests. The remaining known deviation is batch HTTP

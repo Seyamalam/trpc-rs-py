@@ -128,6 +128,22 @@ async function positive(): Promise<void> {
   };
   const createOutput: CreateOutput = created;
 
+  // Subscriptions: `.subscribe()` iterates the yielded item type, and
+  // `Tracked[Post]` yields reach the client as {id, data} pairs. The
+  // `lastEventId` handler parameter is protocol resume metadata and stays
+  // out of the input type.
+  for await (const tick of client.ticks.subscribe(undefined)) {
+    const n: number = tick;
+    void n;
+    break;
+  }
+  for await (const message of client.chat.subscribe({ room: "lobby" })) {
+    const post: { title: string } = message.data;
+    const eventId: string = message.id;
+    void [post, eventId];
+    break;
+  }
+
   // The `weights`, `createdTitle`, `withDefaults`, `pair`, `parentValue`,
   // `nested`, `proxyHealth`, `keywordValue`, `wired`, `byIdInput`,
   // `createInput`, `shadowed`, `entries`, `keywords`, and `helperValue` values
@@ -203,6 +219,21 @@ async function negative(): Promise<void> {
   // The proxy client enforces the same input types.
   // @ts-expect-error node_id must be a number
   await proxy.tree.by_id.query({ node_id: "3" });
+
+  // Subscriptions are called with .subscribe, not .query or .mutate.
+  // @ts-expect-error ticks has no .query method
+  await client.ticks.query();
+
+  // @ts-expect-error chat has no .mutate method
+  await client.chat.mutate({ room: "lobby" });
+
+  // Queries are not subscriptions.
+  // @ts-expect-error health has no .subscribe method
+  await client.health.subscribe();
+
+  // lastEventId is protocol resume metadata, not a client input.
+  // @ts-expect-error lastEventId is not part of chat's input
+  await client.chat.subscribe({ room: "x", lastEventId: "9" });
 }
 
 export { client, negative, positive, proxy };

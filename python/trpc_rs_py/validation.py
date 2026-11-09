@@ -32,6 +32,7 @@ from typing import Any, TypeAlias, cast
 from pydantic import ConfigDict, TypeAdapter, ValidationError, create_model
 
 from .errors import TRPCError, TRPCErrorCode
+from .router import subscription_item_annotation
 
 __all__ = ["InputValidator", "OutputValidator", "build_input_validator", "build_output_validator"]
 
@@ -273,7 +274,9 @@ def build_input_validator(handler: Callable[..., Any]) -> InputValidator | None:
     return validate
 
 
-def build_output_validator(handler: Callable[..., Any]) -> OutputValidator | None:
+def build_output_validator(
+    handler: Callable[..., Any], *, for_subscription: bool = False
+) -> OutputValidator | None:
     """Build a return-value validator from the handler's return annotation.
 
     Missing annotations and annotations containing only ``None`` disable
@@ -282,8 +285,17 @@ def build_output_validator(handler: Callable[..., Any]) -> OutputValidator | Non
     procedure internals; the fixed client-facing message is
     ``"Invalid output from procedure"``.
 
+    With ``for_subscription=True`` the handler's return annotation is unwrapped
+    to the yielded wire item type (`AsyncIterator[Tracked[Msg]]` → `Msg`; the
+    adapter unwraps `Tracked` yields before validating). When the annotation
+    does not describe an async iterable, or its item type is `Any`, no
+    validator is built — the stream itself still enforces that the handler
+    returns an async iterator.
+
     Args:
         handler: The registered procedure callable.
+        for_subscription: Unwrap an async-iterable return annotation to the
+            yielded item type instead of validating the return value itself.
 
     Returns:
         A callable validating output, or ``None`` when no useful return
@@ -303,6 +315,11 @@ def build_output_validator(handler: Callable[..., Any]) -> OutputValidator | Non
     annotation = _hints(handler).get("return", inspect.Signature.empty)
     if annotation is inspect.Signature.empty or annotation in (None, type(None)):
         return None
+    if for_subscription:
+        item = subscription_item_annotation(annotation)
+        if item is None or item is Any:
+            return None
+        annotation = item
     adapter = TypeAdapter(annotation)
 
     def validate(value: Any) -> Any:

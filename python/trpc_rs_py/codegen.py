@@ -44,14 +44,34 @@ import json
 import math
 import re
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterable,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from enum import Enum
 from types import NoneType, UnionType
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, PlainSerializer, RootModel, SerializeAsAny, WrapSerializer
 
-from .router import Procedure, ProcedureKind, Router, _signature_of, _type_hints_of
+from .router import (
+    Procedure,
+    ProcedureKind,
+    Router,
+    _signature_of,
+    _type_hints_of,
+    _unwrap_awaitable,
+)
+from .streaming import Tracked
 
 __all__ = ["generate_types"]
 
@@ -171,6 +191,14 @@ _SET_LIKE = (set, frozenset)
 _DICT_LIKE = (dict, Mapping)
 _STRING_TYPES = (datetime.datetime, datetime.date, datetime.time, uuid.UUID)
 
+# Origins accepted as a subscription's return annotation; the first type
+# argument is the yielded item type (`AsyncGenerator`'s send type is ignored,
+# matching how `AsyncGenerator[T, S]` maps to the item type `T`).
+_ASYNC_ITERABLE_ORIGINS = (AsyncIterator, AsyncIterable, AsyncGenerator)
+# Wrappers an `async def` handler may annotate when it returns a prebuilt
+# async iterable: `Awaitable[AsyncIterator[T]]` / `Coroutine[*, *, X]`.
+_AWAITABLE_ORIGINS = (Awaitable, Coroutine)
+
 # Names the generated module itself defines or imports; user model classes
 # and procedures must never shadow them.
 _RESERVED = frozenset(
@@ -185,6 +213,7 @@ _RESERVED = frozenset(
         "Router",
         "RouterInputs",
         "RouterOutputs",
+        "SubscriptionProcedure",
         # Inference helpers imported by non-empty generated routers.
         "inferRouterInputs",
         "inferRouterOutputs",
@@ -1085,6 +1114,7 @@ def _procedure_name(generator: _Generator, path: str) -> str:
 def _input_members(
     generator: _Generator,
     path: str,
+    kind: ProcedureKind,
     handler: Callable[..., Any],
     hints: dict[str, Any],
     indent: str,
@@ -1096,11 +1126,14 @@ def _input_members(
     a handler with no ordinary parameters takes no input. Unannotated
     parameters, `**kwargs` (arbitrary extra keys) and `*args`-only handlers
     (dynamic list/scalar/null input) are rejected instead of being typed
-    loosely.
+    loosely. For subscriptions, a `lastEventId` parameter is protocol
+    resume metadata injected by the adapter — never a client input — so it
+    is excluded from the input type entirely.
 
     Args:
         generator: Shared name/annotation state.
         path: The procedure's full dotted path.
+        kind: Query, mutation, or subscription.
         handler: The procedure handler.
         hints: Resolved type hints of the handler.
         indent: Indentation prefix for the emitted property lines.
@@ -1113,15 +1146,16 @@ def _input_members(
 
     Example:
         ```python
+        from trpc_rs_py import ProcedureKind
         from trpc_rs_py.codegen import _Generator, _input_members
 
         def greet(name: str, punctuation: str = "!") -> str:
             return name + punctuation
 
         hints = {"name": str, "punctuation": str}
-        assert _input_members(_Generator(), "greet", greet, hints, "    ") == (
-            "{\n      name: string;\n      punctuation?: string;\n    }"
-        )
+        assert _input_members(
+            _Generator(), "greet", ProcedureKind.QUERY, greet, hints, "    "
+        ) == "{\n      name: string;\n      punctuation?: string;\n    }"
         ```
     """
     signature = _signature_of(handler)
@@ -1139,6 +1173,8 @@ def _input_members(
             has_var_keyword = True
         elif parameter.kind is inspect.Parameter.VAR_POSITIONAL:
             has_var_positional = True
+        elif kind is ProcedureKind.SUBSCRIPTION and parameter.name == "lastEventId":
+            continue
         else:
             ordinary.append(parameter)
     if has_var_keyword:
@@ -1173,25 +1209,155 @@ def _input_members(
     return f"{{\n{body}\n{indent}}}"
 
 
-def _output_type(generator: _Generator, path: str, hints: dict[str, Any]) -> str:
+def _subscription_item_type(
+    generator: _Generator,
+    path: str,
+    annotation: object,
+) -> str:
+    """Map one yielded subscription item annotation to its TypeScript type.
+
+    `Tracked[X]` maps to `{id: string; data: X}` — the `TrackedData<X>` shape
+    the official client delivers to `onData` for tracked events (the SSE
+    `id:` field becomes the `id` member); a bare `Tracked` maps to
+    `{id: string; data: unknown}`. The mapping applies at the top level and
+    through `Union`/`Annotated` members — a `Tracked` nested deeper (for
+    example `list[Tracked[int]]`) is rejected by `map_annotation`, matching
+    the runtime where only top-level yielded values are unwrapped.
+
+    Args:
+        generator: Shared name/annotation state.
+        path: The procedure's full dotted path.
+        annotation: The yielded item annotation.
+
+    Returns:
+        TypeScript type text for the item.
+
+    Raises:
+        TypeError: If the item annotation is unsupported.
+
+    Example:
+        ```python
+        from collections.abc import AsyncIterator
+
+        from trpc_rs_py import Tracked
+        from trpc_rs_py.codegen import _Generator, _subscription_item_type
+
+        assert _subscription_item_type(_Generator(), "s", Tracked[int]) == (
+            "{ id: string; data: number; }"
+        )
+        assert _subscription_item_type(_Generator(), "s", Tracked) == (
+            "{ id: string; data: unknown; }"
+        )
+        ```
+    """
+    where = f"procedure {path!r} yielded item"
+    origin = get_origin(annotation)
+    if annotation is Tracked:
+        return "{ id: string; data: unknown; }"
+    if origin is Tracked:
+        args = get_args(annotation)
+        if not args or args[0] is Any:
+            return "{ id: string; data: unknown; }"
+        data = generator.map_annotation(args[0], where)
+        return f"{{ id: string; data: {data}; }}"
+    if origin is Annotated:
+        args = get_args(annotation)
+        generator._check_annotated_metadata(args[1:], where)
+        return _subscription_item_type(generator, path, args[0])
+    if origin is Union or origin is UnionType:
+        members = [_subscription_item_type(generator, path, arg) for arg in get_args(annotation)]
+        return " | ".join(dict.fromkeys(members))
+    if annotation is Any:
+        return "unknown"
+    return generator.map_annotation(annotation, where)
+
+
+def _subscription_output_type(
+    generator: _Generator,
+    path: str,
+    annotation: object,
+) -> str:
+    """Derive the TypeScript `output` type for one subscription procedure.
+
+    The emitted type is `AsyncIterable<T>` so the official client's
+    `inferSubscriptionOutput` unwraps it to the yielded item type — the same
+    shape a native `@trpc/server` resolver produces. `Awaitable`/`Coroutine`
+    wrappers are unwrapped first (an `async def` that returns a prebuilt
+    async iterable). Sync `Iterator`/`Iterable`/`Generator` annotations are
+    rejected: the adapter requires an async iterable at runtime.
+
+    Args:
+        generator: Shared name/annotation state.
+        path: The procedure's full dotted path.
+        annotation: The handler's return annotation.
+
+    Returns:
+        TypeScript type text `AsyncIterable<...>`.
+
+    Raises:
+        TypeError: If the annotation is not an async iterable type.
+
+    Example:
+        ```python
+        from collections.abc import AsyncIterator
+
+        from trpc_rs_py.codegen import _Generator, _subscription_output_type
+
+        assert _subscription_output_type(
+            _Generator(), "ticks", AsyncIterator[int]
+        ) == "AsyncIterable<number>"
+        ```
+    """
+    unwrapped = _unwrap_awaitable(annotation)
+    origin = get_origin(unwrapped)
+    if origin in (Iterator, Iterable, Generator) or unwrapped in (Iterator, Iterable, Generator):
+        msg = (
+            f"procedure {path!r}: subscription handlers must return an async "
+            "iterable (annotate `AsyncIterator[T]`, `AsyncIterable[T]` or "
+            "`AsyncGenerator[T, S]`); a synchronous iterable cannot be served"
+        )
+        raise TypeError(msg)
+    if origin not in _ASYNC_ITERABLE_ORIGINS:
+        msg = (
+            f"procedure {path!r}: subscription handlers must return an async "
+            "iterable; annotate the return type as `AsyncIterator[T]`, "
+            "`AsyncIterable[T]` or `AsyncGenerator[T, S]`, got "
+            f"{_limit(repr(annotation))}"
+        )
+        raise TypeError(msg)
+    args = get_args(unwrapped)
+    if not args:
+        return "AsyncIterable<unknown>"
+    return f"AsyncIterable<{_subscription_item_type(generator, path, args[0])}>"
+
+
+def _output_type(
+    generator: _Generator,
+    path: str,
+    kind: ProcedureKind,
+    hints: dict[str, Any],
+) -> str:
     """Derive the TypeScript output type for one procedure.
 
     Args:
         generator: Shared name/annotation state.
         path: The procedure's full dotted path.
+        kind: Query, mutation, or subscription.
         hints: Resolved type hints of the handler.
 
     Returns:
         TypeScript type text; `null` for handlers returning `None`.
+        Subscriptions emit `AsyncIterable<item>`.
 
     Raises:
         TypeError: If the return annotation is missing or unsupported.
 
     Example:
         ```python
+        from trpc_rs_py import ProcedureKind
         from trpc_rs_py.codegen import _Generator, _output_type
 
-        assert _output_type(_Generator(), "f", {"return": int}) == "number"
+        assert _output_type(_Generator(), "f", ProcedureKind.QUERY, {"return": int}) == "number"
         ```
     """
     annotation = hints.get("return", _MISSING)
@@ -1201,6 +1367,8 @@ def _output_type(generator: _Generator, path: str, hints: dict[str, Any]) -> str
             "annotation so the output can be typed"
         )
         raise TypeError(msg)
+    if kind is ProcedureKind.SUBSCRIPTION:
+        return _subscription_output_type(generator, path, annotation)
     return generator.map_annotation(annotation, f"procedure {path!r} return")
 
 
@@ -1320,7 +1488,11 @@ def _emit_procedure_interface(
         assert lines[0] == "export interface HealthProcedure"
         ```
     """
-    base = "QueryProcedure" if procedure.kind is ProcedureKind.QUERY else "MutationProcedure"
+    base = {
+        ProcedureKind.QUERY: "QueryProcedure",
+        ProcedureKind.MUTATION: "MutationProcedure",
+        ProcedureKind.SUBSCRIPTION: "SubscriptionProcedure",
+    }[procedure.kind]
     input_text = input_type if input_type is not None else "undefined"
     return [
         f"export interface {name}",
@@ -1354,6 +1526,8 @@ def _imports(flat: list[tuple[str, Procedure]]) -> str:
         names.append("QueryProcedure")
     if any(procedure.kind is ProcedureKind.MUTATION for _, procedure in flat):
         names.append("MutationProcedure")
+    if any(procedure.kind is ProcedureKind.SUBSCRIPTION for _, procedure in flat):
+        names.append("SubscriptionProcedure")
     if flat:
         names.append("inferRouterInputs")
         names.append("inferRouterOutputs")
@@ -1408,8 +1582,10 @@ def generate_types(router: Router) -> str:
     interfaces: list[str] = []
     for path, procedure in flat:
         hints = _type_hints_of(procedure.handler)
-        input_type = _input_members(generator, path, procedure.handler, hints, "    ")
-        output_type = _output_type(generator, path, hints)
+        input_type = _input_members(
+            generator, path, procedure.kind, procedure.handler, hints, "    "
+        )
+        output_type = _output_type(generator, path, procedure.kind, hints)
         interfaces.append(
             "\n".join(_emit_procedure_interface(procedure, names[path], input_type, output_type))
         )
