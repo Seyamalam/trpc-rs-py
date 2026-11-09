@@ -9,8 +9,13 @@
 //! * JSON parsing/serialization and request limits for body size, batch size,
 //!   and JSON nesting depth.
 //!
-//! Later milestones will add subscriptions over Server-Sent Events, procedure
-//! timeouts, and TypeScript type generation for the `AppRouter` type.
+//! * Subscriptions over Server-Sent Events in the official
+//!   `httpSubscriptionLink` frame format ([`sse`]).
+//! * Recursive filesystem watching with debounced batches for `trpc-py dev`
+//!   ([`watch`]).
+//!
+//! Later milestones will add procedure timeouts, JSONL stream responses, and
+//! TypeScript type generation for the `AppRouter` type.
 //!
 //! The `PyO3` bindings live in [`crates/trpc-py`] and must stay thin: whole
 //! requests and whole batches cross the Python boundary in one call.
@@ -23,6 +28,7 @@ pub mod error;
 pub mod json;
 pub mod protocol;
 pub mod sse;
+pub mod watch;
 
 /// Crate version, sourced from the workspace version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AsyncIterable<...>` outputs (`{ id, data }` items for tracked yields).
 - Official-client runtime coverage grew to 32 live tests per adapter pair,
   including SSE subscription streaming and async iteration.
+- `trpc-py` CLI (argparse per ADR 0006): `dev` live type sync — Rust `notify`
+  watcher with debounced batches, fresh-subprocess regeneration, atomic
+  changed-only `.d.ts` writes, optional `--server` reload, production
+  refusal via `TRPC_RS_PY_PRODUCTION` — plus `codegen ts`, `routes`,
+  `check`, and `doctor` commands.
 
 ## [0.2.0] - 2026-11-09
 

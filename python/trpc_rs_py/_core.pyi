@@ -95,6 +95,17 @@ class SseEncoder:
     @staticmethod
     def serialized_error(message: str, code_name: str) -> bytes: ...
 
+@final
+class Watcher:
+    """Recursive filesystem watcher for `trpc-py dev` live type sync.
+
+    `next` blocks without holding the GIL and returns one debounced batch of
+    changed paths — a save burst regenerates once, not per OS event.
+    """
+
+    def __new__(cls, paths: list[str]) -> Watcher: ...
+    def next(self, timeout_ms: int | None = None, debounce_ms: int = 50) -> list[str] | None: ...
+
 __all__ = [
     "CallResult",
     "Limits",
@@ -102,6 +113,7 @@ __all__ = [
     "ParsedRequest",
     "SseEncoder",
     "TrpcProtocolError",
+    "Watcher",
     "__version__",
     "build_response",
     "parse_request",

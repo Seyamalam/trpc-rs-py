@@ -25,10 +25,12 @@ mod ffi {
         prelude::*,
         types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString},
     };
+    use std::{path::PathBuf, time::Duration};
+
     use trpc_core::{
         error::{ErrorCode, TrpcError},
         protocol::{self, HttpMethod, Request},
-        sse,
+        sse, watch,
     };
 
     create_exception!(trpc_rs_py._core, TrpcProtocolError, PyException);
@@ -269,6 +271,62 @@ mod ffi {
         }
     }
 
+    /// Recursive filesystem watcher for `trpc-py dev` live type sync.
+    ///
+    /// `next` blocks without holding the GIL and returns one debounced batch
+    /// of changed paths — a save burst regenerates once, not per OS event.
+    #[pyclass(module = "trpc_rs_py._core", name = "Watcher", frozen)]
+    pub struct PyWatcher {
+        // notify's backend is Send but not Sync; the mutex makes `&self`
+        // captures `Ungil` for the GIL-released wait.
+        inner: std::sync::Mutex<watch::DirectoryWatcher>,
+    }
+
+    #[pymethods]
+    impl PyWatcher {
+        /// Watch every directory in `paths` recursively.
+        #[new]
+        fn new(paths: Vec<String>) -> PyResult<Self> {
+            let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+            watch::DirectoryWatcher::new(&paths)
+                .map(|inner| Self {
+                    inner: std::sync::Mutex::new(inner),
+                })
+                .map_err(|error| PyValueError::new_err(error.message))
+        }
+
+        /// Wait for the next debounced batch of changed paths.
+        ///
+        /// `None` on timeout; each path is reported once per batch.
+        #[pyo3(signature = (timeout_ms=None, debounce_ms=50))]
+        fn next(
+            &self,
+            py: Python<'_>,
+            timeout_ms: Option<u64>,
+            debounce_ms: u64,
+        ) -> PyResult<Option<Vec<String>>> {
+            let wait = timeout_ms.map_or(Duration::MAX, Duration::from_millis);
+            let result = py.detach(move || {
+                self.inner
+                    .lock()
+                    .map_err(|_| {
+                        TrpcError::new(ErrorCode::InternalServerError, "watcher lock poisoned")
+                    })?
+                    .next_batch(wait, Duration::from_millis(debounce_ms))
+            });
+            match result {
+                Ok(Some(paths)) => Ok(Some(
+                    paths
+                        .iter()
+                        .map(|path| path.display().to_string())
+                        .collect(),
+                )),
+                Ok(None) => Ok(None),
+                Err(error) => Err(protocol_exception(py, error)?),
+            }
+        }
+    }
+
     fn protocol_exception(py: Python<'_>, error: TrpcError) -> PyResult<PyErr> {
         let exception = TrpcProtocolError::new_err(error.message.clone());
         let value = exception.value(py);
@@ -478,6 +536,7 @@ mod ffi {
         m.add_class::<PyParsedRequest>()?;
         m.add_class::<PyCallResult>()?;
         m.add_class::<PySseEncoder>()?;
+        m.add_class::<PyWatcher>()?;
         m.add_function(wrap_pyfunction!(parse_request, m)?)?;
         m.add_function(wrap_pyfunction!(build_response, m)?)?;
         Ok(())

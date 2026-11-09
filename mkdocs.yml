@@ -14,6 +14,7 @@ nav:
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md
+  - CLI reference: cli.md
   - Benchmarks: benchmarks.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md

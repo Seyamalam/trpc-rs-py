@@ -28,7 +28,7 @@ standalone server, official `@trpc/server`, FastAPI + OpenAPI codegen.
 | Rate limiting | planned | planned | planned | planned | planned | planned | planned | planned |
 | Tracing | planned | planned | planned | planned | planned | planned | planned | planned |
 | TS codegen | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/clients/ts-tests/src/index.ts) (same Router codegen for every framework; [generator tests](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_codegen.py)) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/clients/ts-tests/src/index.ts) (same Router codegen for every framework; [generator tests](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_codegen.py)) | planned | planned | planned | planned | not needed | supported |
-| Live type sync | planned | planned | planned | planned | planned | planned | not supported | not supported |
+| Live type sync | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_dev.py) (`trpc-py dev`: Rust `notify` watch, subprocess reload, atomic changed-only writes; framework-agnostic) | [supported](https://github.com/Seyamalam/trpc-rs-py/blob/main/tests/test_dev.py) (`trpc-py dev`: Rust `notify` watch, subprocess reload, atomic changed-only writes; framework-agnostic) | planned | planned | planned | planned | not supported | not supported |
 | Zod codegen | planned | planned | planned | planned | planned | planned | not needed | not supported |
 | OpenAPI/REST output | planned | planned | planned | planned | planned | planned | not supported | supported |
 | Playground | planned | planned | planned | planned | planned | planned | not supported | not supported |
