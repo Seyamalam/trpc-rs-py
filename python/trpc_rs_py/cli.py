@@ -80,6 +80,26 @@ def _cmd_codegen(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_codegen_openapi(args: argparse.Namespace) -> int:
+    """Handle `trpc-py codegen openapi`: write the OpenAPI document."""
+    import json
+
+    from .openapi import generate_openapi
+
+    router = _load_router(args.app)
+    kwargs: dict[str, str] = {}
+    if args.title is not None:
+        kwargs["title"] = args.title
+    if args.version is not None:
+        kwargs["version"] = args.version
+    document = generate_openapi(router, **kwargs)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"trpc-py codegen: wrote {out}")
+    return 0
+
+
 def _signature_line(handler: object) -> str:
     """One-line signature for `routes` output, parameters only."""
     import inspect
@@ -214,6 +234,16 @@ def build_parser() -> argparse.ArgumentParser:
     codegen_ts.add_argument("--app", required=True, help="router import string (module:attribute)")
     codegen_ts.add_argument("--out", required=True, help="destination .d.ts path")
     codegen_ts.set_defaults(handler=_cmd_codegen)
+    codegen_openapi = codegen_sub.add_parser(
+        "openapi", help="emit the OpenAPI 3.1 document for RestRoute procedures"
+    )
+    codegen_openapi.add_argument(
+        "--app", required=True, help="router import string (module:attribute)"
+    )
+    codegen_openapi.add_argument("--out", required=True, help="destination .json path")
+    codegen_openapi.add_argument("--title", default=None, help="info.title override")
+    codegen_openapi.add_argument("--version", default=None, help="info.version override")
+    codegen_openapi.set_defaults(handler=_cmd_codegen_openapi)
 
     routes = subcommands.add_parser("routes", help="list all procedures")
     routes.add_argument("--app", required=True, help="router import string (module:attribute)")

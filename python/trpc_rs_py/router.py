@@ -95,6 +95,8 @@ class Procedure:
             unannotated.
         errors: Exception types the procedure may raise. Empty for now; typed
             errors land in 0.4.0.
+        rest: Optional `RestRoute` metadata opting the procedure into REST
+            endpoints and the generated OpenAPI document.
 
     Example:
         ```python
@@ -114,6 +116,7 @@ class Procedure:
     input_annotation: Any = None
     output_annotation: Any = None
     errors: tuple[type[Exception], ...] = ()
+    rest: RestRoute | None = None
 
     def __replace__(self, /, **changes: Any) -> Procedure:
         """Return a copy of this procedure with the given fields replaced.
@@ -134,6 +137,86 @@ class Procedure:
             ```
         """
         return dataclasses.replace(self, **changes)
+
+
+_REST_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+_PATH_PARAM_PATTERN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+@dataclasses.dataclass(frozen=True)
+class RestRoute:
+    """Opt-in REST/OpenAPI metadata for a query or mutation procedure.
+
+    Procedures declaring a `RestRoute` are additionally served as plain REST
+    endpoints by `trpc_rs_py.mount_rest` and appear in the generated
+    OpenAPI 3.1 document. Path segments written as `{name}` bind path
+    parameters to same-named handler parameters; remaining parameters come
+    from the query string (GET/DELETE) or the JSON request body.
+
+    Attributes:
+        method: HTTP method; one of GET, POST, PUT, PATCH or DELETE.
+        path: URL path relative to the REST mount, e.g. `/posts/{post_id}`.
+
+    Raises:
+        ValueError: If the method is unsupported or the path is malformed.
+
+    Example:
+        ```python
+        from trpc_rs_py import RestRoute, Router
+
+        router = Router()
+
+        @router.query(rest=RestRoute("GET", "/posts/{post_id}"))
+        def by_id(post_id: int) -> str:
+            return str(post_id)
+        ```
+    """
+
+    method: str
+    path: str
+
+    def __post_init__(self) -> None:
+        """Normalize the method and validate the path template.
+
+        Raises:
+            ValueError: If the method is unsupported, the path does not start
+                with `/`, or a `{name}` placeholder is invalid or repeated.
+        """
+        method = self.method.upper()
+        if method not in _REST_METHODS:
+            msg = (
+                f"Unsupported REST method {self.method!r}: expected one of {sorted(_REST_METHODS)}"
+            )
+            raise ValueError(msg)
+        object.__setattr__(self, "method", method)
+        if not self.path.startswith("/"):
+            msg = f"REST path must start with '/': {self.path!r}"
+            raise ValueError(msg)
+        names = _PATH_PARAM_PATTERN.findall(self.path)
+        if len(names) != len(set(names)):
+            msg = f"REST path repeats a placeholder name: {self.path!r}"
+            raise ValueError(msg)
+        if "{" in _PATH_PARAM_PATTERN.sub("", self.path) or "}" in _PATH_PARAM_PATTERN.sub(
+            "", self.path
+        ):
+            msg = f"Malformed REST path placeholder: {self.path!r}"
+            raise ValueError(msg)
+
+    @property
+    def path_parameters(self) -> tuple[str, ...]:
+        """Return the `{name}` placeholders declared by `path`, in order."""
+        return tuple(_PATH_PARAM_PATTERN.findall(self.path))
+
+    def regex(self) -> re.Pattern[str]:
+        """Compile `path` into an anchored pattern with named groups."""
+        parts: list[str] = []
+        last = 0
+        for match in _PATH_PARAM_PATTERN.finditer(self.path):
+            parts.append(re.escape(self.path[last : match.start()]))
+            parts.append(f"(?P<{match.group(1)}>[^/]+)")
+            last = match.end()
+        parts.append(re.escape(self.path[last:]))
+        return re.compile(f"^{''.join(parts)}$")
 
 
 def _validate_name(name: str, *, what: str) -> None:
@@ -162,7 +245,7 @@ def _validate_name(name: str, *, what: str) -> None:
         raise ValueError(msg)
 
 
-def _type_hints_of(handler: Callable[..., Any]) -> dict[str, Any]:
+def type_hints_of(handler: Callable[..., Any]) -> dict[str, Any]:
     """Resolve a handler's type hints, tolerating unresolvable annotations.
 
     Args:
@@ -176,12 +259,12 @@ def _type_hints_of(handler: Callable[..., Any]) -> dict[str, Any]:
 
     Example:
         ```python
-        from trpc_rs_py._router import _type_hints_of
+        from trpc_rs_py._router import type_hints_of
 
         def f(x: int) -> str:
             return str(x)
 
-        assert _type_hints_of(f)["return"] is str
+        assert type_hints_of(f)["return"] is str
         ```
     """
     try:
@@ -352,12 +435,12 @@ def _input_annotation_of(hints: dict[str, Any], signature: inspect.Signature | N
         ```python
         import inspect
 
-        from trpc_rs_py._router import _input_annotation_of, _type_hints_of
+        from trpc_rs_py._router import _input_annotation_of, type_hints_of
 
         def f(x: int) -> str:
             return str(x)
 
-        assert _input_annotation_of(_type_hints_of(f), inspect.signature(f)) is int
+        assert _input_annotation_of(type_hints_of(f), inspect.signature(f)) is int
         ```
     """
     if signature is None:
@@ -492,10 +575,12 @@ class Router:
 
     @overload
     def query(
-        self, *, name: str | None = ...
+        self, *, name: str | None = ..., rest: RestRoute | None = ...
     ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
 
-    def query(self, *args: Any, name: str | None = None) -> Callable[..., Any]:
+    def query(
+        self, *args: Any, name: str | None = None, rest: RestRoute | None = None
+    ) -> Callable[..., Any]:
         """Register a query procedure; usable bare or with a `name` override.
 
         Args:
@@ -503,6 +588,8 @@ class Router:
                 At most one positional argument is accepted.
             name: Explicit procedure name; defaults to the function's
                 `__name__`.
+            rest: Optional `RestRoute` metadata opting the procedure into the
+                REST endpoints and OpenAPI document served by `mount_rest`.
 
         Returns:
             The function itself when used bare, otherwise a decorator.
@@ -524,17 +611,19 @@ class Router:
             assert "user_by_id" in router.procedures
             ```
         """
-        return self._register(ProcedureKind.QUERY, args, name)
+        return self._register(ProcedureKind.QUERY, args, name, rest)
 
     @overload
     def mutation(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...
 
     @overload
     def mutation(
-        self, *, name: str | None = ...
+        self, *, name: str | None = ..., rest: RestRoute | None = ...
     ) -> Callable[[Callable[[Unpack[_Ts]], _R]], Callable[[Unpack[_Ts]], _R]]: ...
 
-    def mutation(self, *args: Any, name: str | None = None) -> Callable[..., Any]:
+    def mutation(
+        self, *args: Any, name: str | None = None, rest: RestRoute | None = None
+    ) -> Callable[..., Any]:
         """Register a mutation procedure; usable bare or with a `name` override.
 
         Args:
@@ -542,6 +631,8 @@ class Router:
                 At most one positional argument is accepted.
             name: Explicit procedure name; defaults to the function's
                 `__name__`.
+            rest: Optional `RestRoute` metadata opting the procedure into the
+                REST endpoints and OpenAPI document served by `mount_rest`.
 
         Returns:
             The function itself when used bare, otherwise a decorator.
@@ -563,7 +654,7 @@ class Router:
             assert "rename_user" in router.procedures
             ```
         """
-        return self._register(ProcedureKind.MUTATION, args, name)
+        return self._register(ProcedureKind.MUTATION, args, name, rest)
 
     @overload
     def subscription(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...
@@ -610,13 +701,14 @@ class Router:
                 yield 1
             ```
         """
-        return self._register(ProcedureKind.SUBSCRIPTION, args, name)
+        return self._register(ProcedureKind.SUBSCRIPTION, args, name, None)
 
     def _register(
         self,
         kind: ProcedureKind,
         args: tuple[Any, ...],
         name: str | None,
+        rest: RestRoute | None,
     ) -> Callable[..., Any]:
         """Shared registration path for `query` and `mutation`.
 
@@ -625,6 +717,7 @@ class Router:
             args: Decorator positional arguments; at most one, the handler
                 when the decorator is used bare.
             name: Explicit name override, or `None` to use `__name__`.
+            rest: Optional `RestRoute` REST/OpenAPI opt-in metadata.
 
         Returns:
             The handler unchanged when used bare, otherwise the decorator.
@@ -662,8 +755,20 @@ class Router:
             if path in self._procedures:
                 msg = f"Procedure {path!r} is already registered"
                 raise ValueError(msg)
-            hints = _type_hints_of(handler)
+            hints = type_hints_of(handler)
             signature = _signature_of(handler)
+            if rest is not None:
+                missing = [
+                    name
+                    for name in rest.path_parameters
+                    if signature is None or name not in signature.parameters
+                ]
+                if missing:
+                    msg = (
+                        f"REST path {rest.path!r} binds {missing} but "
+                        f"{handler.__name__}() has no such parameters"
+                    )
+                    raise ValueError(msg)
             self._procedures[path] = Procedure(
                 path=path,
                 kind=kind,
@@ -671,6 +776,7 @@ class Router:
                 input_annotation=_input_annotation_of(hints, signature),
                 output_annotation=hints.get("return"),
                 errors=(),
+                rest=rest,
             )
             return handler
 

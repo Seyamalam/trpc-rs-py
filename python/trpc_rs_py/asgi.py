@@ -1240,6 +1240,7 @@ def attach(
     production: bool = False,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int = _DEFAULT_MAX_SSE_EVENT_SIZE,
+    rest_path: str | None = None,
 ) -> ASGIApp:
     """Wrap an existing ASGI app so `router` serves the tRPC prefix.
 
@@ -1273,6 +1274,12 @@ def attach(
             keep-alives — the same default as the official server.
         max_sse_event_size: Largest single encoded SSE frame in bytes before
             the stream ends with an error; defaults to 1 MiB.
+        rest_path: Optional prefix (e.g. `/api`) under which procedures
+            carrying `RestRoute` metadata are served as REST endpoints plus
+            `GET <rest_path>/openapi.json` and `GET <rest_path>/docs`
+            (docs disabled in production unless explicitly enabled). `None`
+            (default) serves tRPC only; use `mount_rest` directly for a
+            standalone REST mount.
 
     Returns:
         A new ASGI application wrapping `app`.
@@ -1305,6 +1312,13 @@ def attach(
         )
         for name, proc in router.procedures.items()
     }
+    rest_app: ASGIApp | None = None
+    if rest_path is not None:
+        from .rest import serve_attached
+
+        rest_app = serve_attached(
+            router, prefix=rest_path, production=production, limits=resolved_limits
+        )
 
     async def middleware(scope: Any, receive: Receive, send: Send) -> None:
         """Route tRPC requests to the router, forwarding everything else."""
@@ -1321,6 +1335,14 @@ def attach(
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
             )
+            return
+        if (
+            scope["type"] == "http"
+            and rest_app is not None
+            and rest_path is not None
+            and _is_trpc_path(scope, rest_path)
+        ):
+            await rest_app(scope, receive, send)
             return
         await app(scope, receive, send)
 

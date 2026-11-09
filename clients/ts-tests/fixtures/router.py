@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
-from trpc_rs_py import Router, TRPCError, TRPCErrorCode, Tracked, tracked
+from trpc_rs_py import RestRoute, Router, TRPCError, TRPCErrorCode, Tracked, tracked
 
 
 class GreetingInput(BaseModel):
@@ -40,7 +40,7 @@ def build_fixture_router() -> Router:
     def ping() -> str:
         return "pong"
 
-    @router.query
+    @router.query(rest=RestRoute("GET", "/echo/{message}"))
     def echo(message: str) -> str:
         return f"echo: {message}"
 
@@ -57,7 +57,7 @@ def build_fixture_router() -> Router:
     def explode() -> str:
         raise RuntimeError("unexpected fixture failure")
 
-    @router.mutation
+    @router.mutation(rest=RestRoute("POST", "/posts"))
     def create_post(title: str) -> CreatedPost:
         return CreatedPost(title=title, created=True)
 

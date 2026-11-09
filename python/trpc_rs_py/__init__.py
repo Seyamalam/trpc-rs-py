@@ -45,7 +45,9 @@ from ._core import Limits
 from .asgi import ASGIApp, attach, mount
 from .codegen import generate_types
 from .errors import TRPCError, TRPCErrorCode, data_code_for
-from .router import Procedure, ProcedureKind, Router
+from .openapi import generate_openapi, merge_openapi
+from .rest import mount_rest
+from .router import Procedure, ProcedureKind, RestRoute, Router
 from .streaming import Tracked, tracked
 from .validation import build_input_validator, build_output_validator
 
@@ -59,6 +61,7 @@ __all__ = [
     "Limits",
     "Procedure",
     "ProcedureKind",
+    "RestRoute",
     "Router",
     "TRPCError",
     "TRPCErrorCode",
@@ -68,7 +71,10 @@ __all__ = [
     "build_input_validator",
     "build_output_validator",
     "data_code_for",
+    "generate_openapi",
     "generate_types",
+    "merge_openapi",
     "mount",
+    "mount_rest",
     "tracked",
 ]

@@ -20,6 +20,7 @@ import {
 import { EventSource } from "eventsource";
 
 import type { AppRouter } from "../fixtures/app-router";
+import type { paths } from "./rest-api";
 
 import {
   RequestLog,
@@ -311,6 +312,40 @@ for (const framework of ["fastapi", "starlette"] as const) {
         ticks.push(event.data.tick);
       }
       assert.deepEqual(ticks, [0, 1, 2]);
+    });
+
+    it("REST GET serves a path-param route typed by openapi-typescript", async () => {
+      type EchoResponses = paths["/echo/{message}"]["get"]["responses"];
+      type EchoOk = EchoResponses[200]["content"]["application/json"];
+      const response = await fetch(`${ctx.server.baseUrl}/api/echo/hello`);
+      assert.equal(response.status, 200);
+      const body: EchoOk = await response.json();
+      assert.equal(body, "echo: hello");
+    });
+
+    it("REST POST serves a JSON body typed by openapi-typescript", async () => {
+      type CreatePost =
+        paths["/posts"]["post"]["responses"][200]["content"]["application/json"];
+      const response = await fetch(`${ctx.server.baseUrl}/api/posts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "rest" }),
+      });
+      assert.equal(response.status, 200);
+      const body: CreatePost = await response.json();
+      assert.deepEqual(body, { title: "rest", created: true });
+    });
+
+    it("serves the OpenAPI 3.1 document the generated types came from", async () => {
+      const response = await fetch(`${ctx.server.baseUrl}/api/openapi.json`);
+      assert.equal(response.status, 200);
+      const document = (await response.json()) as {
+        openapi: string;
+        paths: Record<string, unknown>;
+      };
+      assert.equal(document.openapi, "3.1.0");
+      assert.ok("/echo/{message}" in document.paths);
+      assert.ok("/posts" in document.paths);
     });
   });
 }

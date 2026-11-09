@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed-only `.d.ts` writes, optional `--server` reload, production
   refusal via `TRPC_RS_PY_PRODUCTION` — plus `codegen ts`, `routes`,
   `check`, and `doctor` commands.
+- REST + OpenAPI output (ADR 0005): procedures opt in with
+  `rest=RestRoute(method, path)` on `@router.query`/`@router.mutation`;
+  `mount_rest(router)` serves the REST endpoints, `GET /openapi.json`, and a
+  vendored docs UI (off in production unless `docs=True`) under one ASGI
+  mount — or `attach(..., rest_path="/api")` serves them through the
+  middleware wrapper. Path placeholders bind handler parameters; remaining
+  inputs come from the query string (GET/DELETE) or JSON body, through the
+  same Pydantic validators as tRPC calls.
+- `generate_openapi(router)` emits an OpenAPI 3.1 document with nested
+  Pydantic models hoisted into `components.schemas` — spec-validated in
+  tests, and exercised end-to-end by an `openapi-typescript`-generated
+  client against the live fixture servers; `merge_openapi(app, router)`
+  merges the generated paths into a FastAPI app's own `/openapi.json` via
+  the documented `app.openapi` customization point.
+- `trpc-py codegen openapi --app <module:attr> --out openapi.json` writes the
+  document from the CLI.
 
 ## [0.2.0] - 2026-11-09
 

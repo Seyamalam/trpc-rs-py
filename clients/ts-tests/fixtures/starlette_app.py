@@ -12,7 +12,7 @@ import sys
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
-from trpc_rs_py import mount
+from trpc_rs_py import mount, mount_rest
 
 from router import build_fixture_router
 
@@ -21,7 +21,13 @@ def main() -> None:
     """Serve the fixture router with uvicorn and announce readiness."""
     import uvicorn
 
-    app = Starlette(routes=[Mount("/trpc", app=mount(build_fixture_router()))])
+    router = build_fixture_router()
+    app = Starlette(
+        routes=[
+            Mount("/trpc", app=mount(router)),
+            Mount("/api", app=mount_rest(router, title="Fixture API", version="0.1.0")),
+        ]
+    )
     port = int(os.environ["TRPC_TEST_PORT"])
     print("READY", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")

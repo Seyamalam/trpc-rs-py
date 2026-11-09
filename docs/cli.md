@@ -36,6 +36,17 @@ One-off declaration generation, same `--app`/`--out` contract:
 trpc-py codegen ts --app server:router --out web/router.d.ts
 ```
 
+## `trpc-py codegen openapi`
+
+Emit the OpenAPI 3.1 document for `RestRoute`-annotated procedures:
+
+```bash
+trpc-py codegen openapi --app server:router --out openapi.json \
+    --title "Blog API" --version 1.0.0
+```
+
+See [REST + OpenAPI](rest.md) for the `RestRoute` opt-in and `mount_rest`.
+
 ## `trpc-py routes`
 
 List every procedure with its kind and signature; `--json` emits

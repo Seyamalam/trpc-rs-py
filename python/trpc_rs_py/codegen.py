@@ -68,8 +68,8 @@ from .router import (
     ProcedureKind,
     Router,
     _signature_of,
-    _type_hints_of,
     _unwrap_awaitable,
+    type_hints_of,
 )
 from .streaming import Tracked
 
@@ -1581,7 +1581,7 @@ def generate_types(router: Router) -> str:
 
     interfaces: list[str] = []
     for path, procedure in flat:
-        hints = _type_hints_of(procedure.handler)
+        hints = type_hints_of(procedure.handler)
         input_type = _input_members(
             generator, path, procedure.kind, procedure.handler, hints, "    "
         )
