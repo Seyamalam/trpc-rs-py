@@ -229,6 +229,10 @@
   other-model subagent is substituted. Deviation from the MISSION §17
   cross-model review rule recorded transparently; re-enable cross-model
   review when the two models are reachable again.
+- RE-CHECKED 2026-11-09 (post-0.2.0): still unavailable — subagent tools
+  expose only Claude profiles (`subagent_explore`/`subagent_general`) and no
+  MCP server provides `delegate_task`. Continuing direct implementation
+  under the same recorded deviation.
 - Next: commit + push Task G and the bug fixes (full `just ci` green), run
   the first benchmark suite, then 0.2.0 bump + annotated tag. NOTE: no git
   tags exist yet even though CHANGELOG has a 0.1.0 entry — resolve the tag
@@ -290,6 +294,10 @@
 - ADR 0002: `serde_json` now; isolation module; revisit with 0.2.0 benchmarks. (`docs/decisions/0002-json-library.md`)
 - ADR 0003: Pydantic v2 first-class; internal `SchemaProvider` protocol for later libs. (`docs/decisions/0003-schema-libraries.md`)
 - ADR 0004: standalone server on hyper 1.x + http-body-util, no axum. (`docs/decisions/0004-standalone-server-framework.md`)
+- ADR 0005: standalone OpenAPI doc under the REST mount + opt-in `merge_openapi`
+  for FastAPI's own `/openapi.json`. (`docs/decisions/0005-openapi-document-placement.md`)
+- ADR 0006: Python `argparse` CLI now (`dev`/`init`/`codegen`/`routes`/`check`/
+  `doctor`); clap port re-evaluated at 0.6.0. (`docs/decisions/0006-cli-implementation-language.md`)
 
 ## Latest benchmark headline numbers
 
