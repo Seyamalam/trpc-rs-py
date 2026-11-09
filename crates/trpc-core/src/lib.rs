@@ -32,6 +32,16 @@ mod tests {
 
     #[test]
     fn version_matches_workspace() {
-        assert_eq!(VERSION, "0.1.0");
+        let manifest = include_str!("../../../Cargo.toml");
+        let section = manifest
+            .split("[workspace.package]")
+            .nth(1)
+            .expect("workspace.package section");
+        let expected = section
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("version = \""))
+            .and_then(|rest| rest.strip_suffix('"'))
+            .expect("workspace version");
+        assert_eq!(VERSION, expected);
     }
 }
