@@ -171,8 +171,68 @@
   ser_json_temporal seconds output (datetime→number), extra=allow preserving
   unknown fields, and model names colliding with inference-helper imports.
   Docs now list these new hard-failure cases.
-- Next: task G — official `@trpc/client` compatibility tests + fastapi-basic
-  example; then 0.2.0 bump + first benchmark run.
+- Task G done: the official
+  `@trpc/client` 11.25.0 runtime compatibility suite
+  (`clients/ts-tests/src/runtime.test.ts`, run via `tsx --test` from
+  `scripts/ts-tests.sh`) spawns live FastAPI and Starlette fixture servers
+  (`clients/ts-tests/fixtures/{fastapi,starlette}_app.py` sharing
+  `fixtures/router.py`) on free localhost ports and calls them with the real
+  official client. Per adapter it verifies: typed query, Pydantic-validated
+  query, typed mutation, two-query batching in exactly ONE HTTP request
+  (request-counting fetch wrapper) with order preserved, query+mutation split
+  into separate batches (official batching is per operation type),
+  `methodOverride: "POST"` queries, and GET-on-mutation → HTTP 405.
+  All 28 runtime tests pass (14 cases × 2 adapters); the suite asserts the
+  official wire contract verified against a real `@trpc/server` 11.25.0
+  reference server (error envelope captured verbatim) and its installed
+  source. `fastapi-basic` example added
+  (app.py, generate_types.py, committed app-router.d.ts, README with exact
+  clean-checkout commands, smoke.sh green in `scripts/examples-smoke.sh`).
+  New dev deps: `uvicorn` (Python), `tsx` + `@types/node` (ts-tests);
+  generated `.d.ts` files excluded from prettier via
+  `clients/ts-tests/.prettierignore`; both committed d.ts fixtures are
+  drift-checked in `scripts/ts-tests.sh`. docs/protocol.md (new) documents
+  the wire format, verified envelopes, and the open deviations; feature
+  matrix rows updated with runtime-test links; mkdocs nav updated. All other
+  gates green (cargo fmt/clippy/test 41, maturin, mypy/pyright/stubtest,
+  pytest 173, prettier/tsc, docs strict, example smoke).
+- FIXED BUG A (was blocker, Rust core): error envelope now emits the flat
+  official v11 shape `{"error":{"message","code":<number>,"data":{"code",
+  "httpStatus"}}}` with NO `json` wrapper (`crates/trpc-core/src/json.rs`,
+  `error.rs`); `tests/test_asgi.py` and `tests/test_core_boundary.py` updated
+  to pin the official shape. Verified by the runtime suite: TRPCError,
+  unknown procedure, validation and method-enforcement errors all surface
+  with code/shape/data in the official client.
+- FIXED BUG B (was blocker, Rust core batch parsing): missing batch index
+  keys now mean no-input (`null`) for that call, and an all-undefined batch
+  (`input={}`) is accepted; present indexes must still be numeric and within
+  the batch (`crates/trpc-core/src/protocol.rs batch_inputs`). Verified by
+  the runtime suite: no-input queries and mutations work through
+  `httpBatchLink`.
+- FIXED (test-side): the batched GET-on-mutation runtime case expected a
+  single envelope; the official server enforces the method PER CALL (inside
+  its `calls.map` loop, `resolveResponse` dist line ~1819), so a batch array
+  is correct. Official batch status rule verified in `getHTTPStatusCode`:
+  uniform per-call status → that status; differing statuses → 207. Test now
+  asserts the array shape; 28/28 green.
+- Cosmetic deviation (non-blocking, documented): a batched response whose
+  per-call HTTP statuses differ returns the first error's status instead of
+  the official 207; the official client ignores the batch status and uses
+  per-call envelopes, so official-client traffic is unaffected. Optional
+  alignment: compute the status set in `build_response` (uniform → that
+  status, differing → 207).
+- SESSION 2026-11-09: GPT 6 Luna / GLM 5.3 Flash delegation is unavailable
+  in this environment (no `delegate_task` tool; `list_agents` shows only the
+  default Qoder agent, no teams). Per the user's explicit instruction to
+  proceed and finish the project, the orchestrator implements and verifies
+  directly (precedent: orchestrator-applied fixes in tasks B/C/E/F); NO
+  other-model subagent is substituted. Deviation from the MISSION §17
+  cross-model review rule recorded transparently; re-enable cross-model
+  review when the two models are reachable again.
+- Next: commit + push Task G and the bug fixes (full `just ci` green), run
+  the first benchmark suite, then 0.2.0 bump + annotated tag. NOTE: no git
+  tags exist yet even though CHANGELOG has a 0.1.0 entry — resolve the tag
+  gap at release time.
 
 ## What was in progress (superseded)
 
@@ -184,16 +244,14 @@
 1. Finish 0.1.0: benchmark harness skeleton (`benchmarks/README.md`, `plot.py`),
    git hooks installed, docs skeleton, feature matrix skeleton — done as part
    of the foundation commits.
-2. **0.2.0 Core on FastAPI progress:** tasks A–E complete (Rust protocol,
+2. **0.2.0 Core on FastAPI progress:** tasks A–G complete (Rust protocol,
    Python Router/errors, PyO3 batch boundary, ASGI adapter, Pydantic v2
-   validation); all changes committed/pushed after review + gates. Remaining:
-   a. Task F: `generate_types` AppRouter .d.ts codegen — DONE (this commit;
-      CLI deferred to 0.6.0 Rust CLI milestone, recorded in docs/codegen.md).
-   b. Task G: official @trpc/client v11 compatibility tests against FastAPI/
-      Starlette for queries, mutations, batching and errors; add fastapi-basic
-      example with README + smoke test.
-   c. Update feature matrix from test evidence and run first benchmark suite.
-   d. Bump to 0.2.0, update CHANGELOG, annotated tag, push.
+   validation, `generate_types` codegen, official-client runtime suite +
+   fastapi-basic example). Remaining:
+   a. Commit + push the Task G / bug-fix working tree after full gate green.
+   b. Run the first benchmark suite (results JSON + plots + headline numbers).
+   c. Resolve the missing v0.1.0 tag; bump to 0.2.0, update CHANGELOG,
+      annotated tag, push.
 3. Then begin 0.3.0 launch work (live types, AI streaming, OpenAPI/REST,
    starter); stop at launch and ask user to publish/report feedback.
 
@@ -224,6 +282,8 @@
 - clippy `doc_markdown` fires on `PyO3`, `CPython`, `SCREAMING_SNAKE_CASE` in
   rustdoc — backtick them.
 - mypy wants `assert_type` from `typing_extensions` even on 3.14.
+- Git hooks live in `.githooks/` via `core.hooksPath` (NOT `.git/hooks/`);
+  `just hooks` (re)installs them.
 
 ## Recent decisions (ADRs)
 
