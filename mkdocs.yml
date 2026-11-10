@@ -41,3 +41,4 @@ nav:
       - 0008 Node migration link: decisions/0008-node-migration-link.md
       - 0009 Typed errors: decisions/0009-typed-errors.md
       - 0010 WSGI/Django adapter bridge: decisions/0010-wsgi-django-adapter-bridge.md
+      - 0011 Context and middleware: decisions/0011-context-and-middleware.md
