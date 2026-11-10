@@ -37,10 +37,22 @@ trpc-py init my-app            # creates ./my-app
 trpc-py init my-app --dir app  # or an explicit directory
 ```
 
-`nextjs-fastapi` (the default and only template today) lays down a FastAPI
-server with tRPC + REST mounts and a minimal Next.js app wired to the
-official `@trpc/client` — see the generated `README.md` for run steps. The
-target directory must be empty.
+`nextjs-fastapi` (the default) lays down a FastAPI server with tRPC + REST
+mounts and a minimal Next.js app wired to the official `@trpc/client` — see
+the generated `README.md` for run steps. The target directory must be empty.
+
+Backend-only templates wire the same router into one framework each —
+pick with `--template`:
+
+| Template | Stack |
+|---|---|
+| `nextjs-fastapi` (default) | FastAPI + Next.js monorepo starter |
+| `fastapi-only` | FastAPI backend (`uvicorn server:app`) |
+| `flask-only` | Flask backend (`python server.py`, `mount_wsgi` + `wsgi_from_asgi`) |
+| `django-only` | Django backend (`python server.py`, sync view + `asgi_view`) |
+
+Each generated project contains `server.py`, a pre-generated
+`app-router.d.ts`, and a README covering `trpc-py dev` live type sync.
 
 ## `trpc-py codegen ts`
 

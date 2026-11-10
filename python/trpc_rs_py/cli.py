@@ -138,7 +138,7 @@ def _cmd_codegen_openapi(args: argparse.Namespace) -> int:
     return 0
 
 
-_TEMPLATES = ("nextjs-fastapi",)
+_TEMPLATES = ("nextjs-fastapi", "fastapi-only", "flask-only", "django-only")
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
