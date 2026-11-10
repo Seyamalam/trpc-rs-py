@@ -5,13 +5,13 @@
 
 ## Current version and milestone
 
-- Version: **0.5.0 released** (`v0.5.0` tag pushed 2026-11-10, release commit
-  `f44ddc7`, wheel in `target/wheels/`); benchmark artifacts committed
-  `0e91126`. All 0.5.0 scope shipped — WSGI (Flask) + Django (sync/async)
-  adapters, 4 framework examples, 3 backend-only init templates, adapters
-  doc, feature-matrix updates, adapter benchmarks.
+- Version: **0.6.0 released** (`v0.6.0` tag, release commit + benchmark
+  artifacts on `main`); prior: 0.5.0 (`v0.5.0`, artifacts `0e91126`).
+  All 0.6.0 scope shipped — context, middleware chain, security
+  wrappers, tracing, testing clients, playground panel, AI SDK
+  helpers, CLI `--json`.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- 0.6.0 in progress: ADR 0011 landed as two commits — context `1d25ce9`
+- 0.6.0 detail: ADR 0011 landed as two commits — context `1d25ce9`
   (`RequestContext`, `context_factory` on all 5 adapters, leading `ctx`
   injected everywhere and excluded from input/codegen/zod/OpenAPI;
   `docs/context.md`; 40 tests, 401 total) and middleware (this commit:
@@ -43,11 +43,16 @@
   `ai_text_stream`/`ai_message_stream`/`ai_data_part` emit UI-message-
   stream v1 chunks yieldable from subscriptions too); `check --json`
   + enriched `routes --json` (input/output/errors keys). 595 total
-  tests. Next: benchmarks + changelog → `scripts/release.sh 0.6.0`.
-- Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0 done** →
-  0.6.0 scope open (MISSION leftovers: standalone Rust server, JSONL
-  streams, more npm packages, playground, middleware/CORS/CSRF/rate
-  limiting/tracing, Python client, security hardening).
+  tests. Gotchas: `mypy.stubtest` flattens function-local class defs
+  into the module export view (`_TestClient@694` phantom exports) —
+  patch instances or hoist classes instead (same class of issue as
+  the `@lru_cache` signature mangling noted in the context work).
+  Panel introspection uses the full-parameter OBJECT schema for
+  inputs (a scalar first-param schema would generate wire-invalid
+  forms). HANDOFF.md deleted at release.
+- Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → 0.5.0 (done) →
+  **0.6.0 done** → 0.7.0 scope (Python client `serve`/`codegen py-client`,
+  standalone Rust server, performance pass).
 
 ## What is done
 
