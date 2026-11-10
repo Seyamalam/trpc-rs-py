@@ -254,6 +254,75 @@ def untyped(x):
         assert cli_main(["check", "--app", "router_mod_untyped:router"]) == 1
 
 
+def test_cli_check_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_router_module(tmp_path, procedures=2, name="router_mod_check_json")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    import io
+    from contextlib import redirect_stdout
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        assert cli_main(["check", "--app", "router_mod_check_json:router", "--json"]) == 0
+    assert json.loads(buffer.getvalue()) == {"ok": True, "procedures": 2}
+
+
+def test_cli_check_json_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_router_module(
+        tmp_path,
+        body="""from trpc_rs_py import Router
+
+router = Router()
+
+@router.query
+def untyped(x):
+    return x
+""",
+        name="router_mod_check_bad",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "router_mod_check_bad", raising=False)
+    assert cli_main(["check", "--app", "router_mod_check_bad:router", "--json"]) == 1
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result["ok"] is False
+    assert result["error"]
+    assert captured.err == ""
+
+
+def test_cli_routes_json_types(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_router_module(
+        tmp_path,
+        body="""from trpc_rs_py import Router, TRPCError, TRPCErrorCode
+
+class PostNotFound(TRPCError):
+    code = TRPCErrorCode.NOT_FOUND
+
+router = Router()
+
+@router.query(name="posts.by_id", errors=[PostNotFound])
+def by_id(post_id: int) -> int:
+    return post_id
+""",
+        name="router_mod_routes_types",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    import io
+    from contextlib import redirect_stdout
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        assert cli_main(["routes", "--app", "router_mod_routes_types:router", "--json"]) == 0
+    routes = json.loads(buffer.getvalue())
+    assert len(routes) == 1
+    entry = routes[0]
+    assert entry["path"] == "posts.by_id"
+    assert "int" in entry["input"]
+    assert "int" in entry["output"]
+    assert entry["errors"] == ["PostNotFound"]
+
+
 def test_cli_init_scaffolds_template(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / "my-app"
     assert cli_main(["init", "my-app", "--dir", str(target)]) == 0

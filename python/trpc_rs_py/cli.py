@@ -225,6 +225,13 @@ def _cmd_routes(args: argparse.Namespace) -> int:
                 "path": proc.path,
                 "kind": proc.kind.value,
                 "handler": getattr(proc.handler, "__name__", repr(proc.handler)),
+                "input": (
+                    repr(proc.input_annotation) if proc.input_annotation is not None else None
+                ),
+                "output": (
+                    repr(proc.output_annotation) if proc.output_annotation is not None else None
+                ),
+                "errors": [error.__name__ for error in proc.errors],
             }
             for proc in procedures.values()
         ]
@@ -243,9 +250,15 @@ def _cmd_check(args: argparse.Namespace) -> int:
     try:
         generate_types(router)
     except TypeError as error:
-        print(f"trpc-py check: {error}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(error)}))
+        else:
+            print(f"trpc-py check: {error}", file=sys.stderr)
         return 1
-    print(f"trpc-py check: ok — {count} procedure{'s' if count != 1 else ''}")
+    if args.json:
+        print(json.dumps({"ok": True, "procedures": count}))
+    else:
+        print(f"trpc-py check: ok — {count} procedure{'s' if count != 1 else ''}")
     return 0
 
 
@@ -368,6 +381,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     check = subcommands.add_parser("check", help="validate a router generates cleanly")
     check.add_argument("--app", required=True, help="router import string (module:attribute)")
+    check.add_argument("--json", action="store_true", help="emit JSON")
     check.set_defaults(handler=_cmd_check)
 
     doctor = subcommands.add_parser("doctor", help="print environment info for bug reports")

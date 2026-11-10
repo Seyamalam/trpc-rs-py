@@ -88,13 +88,18 @@ See [REST + OpenAPI](rest.md) for the `RestRoute` opt-in and `mount_rest`.
 ## `trpc-py routes`
 
 List every procedure with its kind and signature; `--json` emits
-`[{path, kind, handler}]`.
+`[{path, kind, handler, input, output, errors}]` where `input`/`output`
+are the resolved type-hint reprs (`null` when unannotated) and `errors`
+is the list of declared `TRPCError` subclass names.
 
 ## `trpc-py check`
 
 Validate that the router generates cleanly — untyped parameters,
 unmappable annotations, and invalid subscription signatures each report the
-procedure at fault. Exit 0 when clean, 1 otherwise.
+procedure at fault. Exit 0 when clean, 1 otherwise. `--json` emits
+`{"ok": true, "procedures": N}` on success and `{"ok": false, "error": "…"}`
+on stdout when validation fails (exit 1); without `--json` the error goes
+to stderr.
 
 ## `trpc-py doctor`
 
