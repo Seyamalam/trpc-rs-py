@@ -5,12 +5,12 @@
 
 ## Current version and milestone
 
-- Version: **0.3.0 released** (`v0.3.0` tag pushed, wheel in `target/wheels/`);
-  milestone **0.4.0 Node-migration + typed errors** — in progress.
+- Version: **0.4.0 released** (`v0.4.0` tag pushed 2026-11-10, wheel in
+  `target/wheels/`); next milestone to be agreed with the user.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → **0.4.0: migration link, Zod codegen,
-  typed errors, migrate-from-node demo — all shipped; release pending**
-  (user approved via "continue").
+  typed errors, migrate-from-node demo — all shipped and released** (user
+  approved via "continue").
 
 ## What is done
 
@@ -261,7 +261,7 @@
 2. **Launch handoff (MISSION §19):** user publishes the 0.3.0 release + draft
    announcement (`docs/launch/announcement.md`) and reports feedback.
    (0.4.0 proceeded anyway on an explicit "continue".)
-3. **0.4.0 feature-complete.** Done: ADR 0008 + ADR 0009 `1f0dc87`; typed
+3. **0.4.0 released.** Done: ADR 0008 + ADR 0009 `1f0dc87`; typed
    errors + wire-table fix `6572c0a` — `errors=[...]` declarations,
    `TRPCError` subclass `code`/`data_model`, payload merge into `error.data`
    with reserved-key immunity across JSON/SSE/REST, `data.path` on procedure
@@ -274,7 +274,10 @@
    `migrationLink` (prefix `py.` + explicit `procedures`, subscriptions over
    SSE, no path rewriting, `dist/` ESM build) + `MergedAppRouter` (deep
    record merge, Python wins, `errorShape` union); `examples/migrate-from-node`
-   smoke-tested live. Remaining: benchmarks, 0.4.0 release.
+   smoke-tested live. Released as `v0.4.0` (`cdf048c`); no hot-path changes, so
+   the 0.3.0 benchmark numbers stand. Next: agree 0.5.0 scope with the user
+   (MISSION leftovers — Flask/Django adapters, standalone server, JSONL
+   streams, more npm packages).
 
 ## Open questions
 
