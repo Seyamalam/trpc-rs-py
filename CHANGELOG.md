@@ -5,6 +5,51 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- WSGI and Django adapters (ADR 0010): one dispatch path everywhere — a
+  per-request pumped loop drives the same ASGI app from sync code.
+  * `mount_wsgi(router)` — WSGI callable for any WSGI server; SSE
+    subscriptions stream through the response iterable.
+  * `attach_flask(app, router)` — one-call Flask mount via
+    `DispatcherMiddleware`.
+  * `wsgi_from_asgi(asgi_app)` — wraps any ASGI `http` app (for example
+    `mount_rest`) as a WSGI callable.
+  * `trpc_rs_py.django`: `trpc_view` / `trpc_view_async` Django views,
+    `trpc_urlpatterns` URL helper (`asynchronous=True` picks the async
+    view), and generic `asgi_view` / `asgi_view_async` for mounting any
+    ASGI app (REST, OpenAPI doc) in a URLconf.
+- `docs/adapters.md` — adapter guide with the WSGI streaming limitations:
+  one worker thread per open SSE stream, disconnects noticed on write,
+  `sse_ping_interval` guidance.
+- Compat fixtures for Flask, Django sync, and Django async — the official
+  `@trpc/client` runtime suite now runs every protocol test against all
+  five adapters (102 tests).
+- New dev dependencies: `flask`, `django`, `django-stubs`,
+  `django-stubs-ext` (stubtest coverage).
+- `examples/starlette-basic`, `examples/flask-basic`,
+  `examples/django-sync`, `examples/django-async` — one runnable, smoke
+  -tested example per adapter, each serving tRPC + REST + OpenAPI.
+- `trpc-py init` backend-only templates `fastapi-only`, `flask-only`,
+  `django-only` (MISSION §2.8), each smoke-tested end to end in the gate.
+- Adapter micro-benchmarks for `mount_wsgi` and `trpc_view`.
+
+### Fixed
+
+- The sync↔ASGI bridge could hang process exit: `asyncio.to_thread`
+  executor threads (non-daemon) blocked forever on the bounded send queue
+  or the cancel event. Replaced with cancellable `put_nowait` polling —
+  real backpressure, no executor threads.
+- Empty `Content-Length` headers (sent by wsgiref on GETs) reached the
+  protocol layer through Django scopes and were rejected as BAD_REQUEST;
+  they are now stripped like the WSGI environ path.
+- SSE responses emitted `connection: keep-alive`, a hop-by-hop header WSGI
+  forbids — wsgiref asserted and returned 500. The bridge now strips RFC
+  7230 hop-by-hop headers (including headers named by the `Connection`
+  token) on both the sync and async Django paths.
+
 ## [0.4.0] - 2026-11-10
 
 ### Added

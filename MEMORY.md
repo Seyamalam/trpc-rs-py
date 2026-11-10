@@ -6,11 +6,15 @@
 ## Current version and milestone
 
 - Version: **0.4.0 released** (`v0.4.0` tag pushed 2026-11-10, wheel in
-  `target/wheels/`); next milestone to be agreed with the user.
+  `target/wheels/`); 0.5.0 in progress — WSGI (Flask) + Django (sync/async)
+  adapters, examples, backend-only init templates all shipped and pushed
+  (`ecf6bb0`, `755bda5`, `899c35a`, `ab6fe6c`, `556fcdc`, `9e20303`);
+  remaining: release.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- Roadmap: 0.2.0 (done) → 0.3.0 (done) → **0.4.0: migration link, Zod codegen,
-  typed errors, migrate-from-node demo — all shipped and released** (user
-  approved via "continue").
+- Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0: more
+  adapters — WSGI (Flask) and Django (sync and async), examples, remaining
+  templates, WSGI streaming-limitation docs** (user approved via "lets do
+  the next version").
 
 ## What is done
 
@@ -278,6 +282,27 @@
    the 0.3.0 benchmark numbers stand. Next: agree 0.5.0 scope with the user
    (MISSION leftovers — Flask/Django adapters, standalone server, JSONL
    streams, more npm packages).
+- 0.5.0 (in progress; all code pushed, release pending). ADR 0010 settled the
+  design: ONE dispatch path — sync contexts drive the ASGI app on a
+  per-request pumped event loop in a daemon thread (`_bridge.serve_asgi_sync`,
+  bounded Queue(maxsize=1) for real backpressure, `close()` cancels).
+  Shipped: `mount_wsgi`/`attach_flask`/`wsgi_from_asgi` (WSGI + Flask),
+  `trpc_rs_py.django` (`trpc_view`/`trpc_view_async`/`trpc_urlpatterns` +
+  generic `asgi_view`/`asgi_view_async` for REST mounts — converter name
+  `path`). Compat suite now runs all 102 official-client tests against five
+  adapters (fastapi, starlette, flask, django_sync, django_async); 361
+  pytest; 7 example smokes + 3 template smokes in the gate. Bugs the new
+  smokes caught: (1) `asyncio.to_thread` executor threads (non-daemon)
+  blocked forever on the full send queue → hung pytest/push; replaced with
+  cancellable `put_nowait` polling. (2) wsgiref sends `Content-Length: ""`
+  on GETs → stripped in `_scope_from_request`. (3) SSE `connection:
+  keep-alive` is hop-by-hop → `strip_hop_by_hop` in the bridge (wsgiref
+  asserted otherwise). Adapter micros (M5 Pro): ASGI ~506µs, WSGI ~1558µs,
+  Django sync ~1565µs — the pumped-loop + worker-thread cost, documented in
+  docs/adapters.md with the WSGI streaming limits. Templates `fastapi-only`/
+  `flask-only`/`django-only` scaffold via `trpc-py init --template`; each
+  has a gate smoke (scaffold→serve→curl tRPC+REST+SSE+OpenAPI). Remaining
+  for 0.5.0: CHANGELOG→release.sh→v0.5.0 tag→`benchmarks/run.py` artifacts.
 
 ## Open questions
 
