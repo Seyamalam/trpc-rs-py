@@ -67,15 +67,10 @@ justfile            # task runner
 - Docs, tests, and the feature matrix change in the same commit as the code
   they describe, or the commit right after.
 
-## Subagent and review rules (MISSION.md §17)
+## Subagent rules (MISSION.md §17)
 
-- Subagents run **only** on **GPT 6 Luna** and **GLM 5.3 Flash**. Never
-  substitute another model; if one is unavailable, stop and report.
-- Every piece of work is reviewed by a subagent on the *other* model. The
-  reviewer sees only the brief, the diff, and MISSION.md — never the author's
-  reasoning. Verdict + findings required.
-- Findings go back to the author, then to a fresh review. Commit only after
-  approval and a passing `just ci-fast`.
+- Subagent delegation is optional; the orchestrator may implement and
+  verify work directly.
 - Subagents never commit or push. The orchestrator owns git.
 - Parallel subagents only with non-overlapping file sets; briefs must state
   allowed paths, acceptance criteria, performance and security expectations.
@@ -102,7 +97,6 @@ from a test), and benchmarked if it touches a hot path.
 - No branches, no PRs — one linear `main` history.
 - Never bypass git hooks with `--no-verify`.
 - Never hand-edit benchmark numbers or results JSON.
-- Never substitute a subagent model outside GPT 6 Luna / GLM 5.3 Flash.
 - Never let subagents commit or push.
 - Never leak internal errors in production mode; error shapes are fixed.
 - Never put the Rust core in the headline; it is the reason, not the pitch.

@@ -263,19 +263,15 @@ There is no hosted CI. Do not create `.github/workflows` or any other hosted pip
 * A commit must pass `just ci-fast`, and the pre-push hook runs the full gate. If the gate fails, fix forward in a new commit. Never rewrite pushed history.
 * Docs, tests, and the feature matrix are updated in the same commit as the code they describe, or in the commit right after it.
 
-## 17. Subagent Orchestration
-You are the lead orchestrator. You plan, write task briefs, assign work, check reviews, and own git. Subagents do the implementation, tests, docs, examples, and benchmarks.
-* **Models:** subagents run only on **GPT 6 Luna** and **GLM 5.3 Flash**. Do not use any other model. If either model is unavailable, stop and report it. Never substitute another model.
-* **Independent review:** every piece of work is reviewed by a subagent on the *other* model. Work written by GPT 6 Luna is reviewed by GLM 5.3 Flash, and the reverse. The reviewer never sees the author's reasoning, only the brief, the diff, and this document. The reviewer checks correctness, tests, type safety, security, performance, docs, and the feature matrix, and returns a verdict with findings.
-* **Fix loop:** findings go back to the author for fixes, then to a fresh review. Work is committed only after the reviewer approves and `just ci-fast` passes.
-* **Git ownership:** subagents never commit or push. The orchestrator commits and pushes each approved change. This keeps one linear history without branches.
+## 17. Subagents
+You are the lead orchestrator. You plan, implement, verify, and own git. Subagents are optional helpers; the orchestrator may implement and verify work directly. When subagents are used:
+* **Git ownership:** subagents never commit or push. The orchestrator commits and pushes each change. This keeps one linear history without branches.
 * **Parallel work:** because there are no branches, subagents share one working tree. Run subagents in parallel only when their file sets don't overlap, and state the allowed paths in each brief. Run everything else in sequence.
 * **Task briefs** contain: goal, allowed file paths, acceptance criteria (tests that must pass, docs and matrix rows to update), performance expectations, and security considerations.
-* **Roles:** implementer, test writer (a different subagent from the implementer), reviewer, docs writer, example writer, benchmark runner, security auditor (before each minor release).
 
 ## 18. AGENTS.md and MEMORY.md
 Create both in the repo root during the first step and keep them current.
-* **`AGENTS.md`** (instructions for any agent working in the repo): project summary and positioning, layout, build and test commands (`just` recipes), coding standards, commit rules, the subagent and review rules from section 17, versioning rules, the definition of done, and things never to do (hosted CI, branches, `--no-verify`, hand-edited benchmark numbers, model substitution).
+* **`AGENTS.md`** (instructions for any agent working in the repo): project summary and positioning, layout, build and test commands (`just` recipes), coding standards, commit rules, the subagent rules from section 17, versioning rules, the definition of done, and things never to do (hosted CI, branches, `--no-verify`, hand-edited benchmark numbers).
 * **`MEMORY.md`** (the project's working memory, so a new session can resume without re-discovering everything): current version and milestone, what is done, what is in progress, the next tasks in priority order, open questions, known issues and gotchas, recent decisions with links to ADRs, the latest benchmark headline numbers, and user feedback from the launch (section 19). Read it at the start of every session. Update it in every commit that changes project state.
 
 ## 19. Roadmap

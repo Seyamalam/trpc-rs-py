@@ -240,6 +240,11 @@
   expose only Claude profiles (`subagent_explore`/`subagent_general`) and no
   MCP server provides `delegate_task`. Continuing direct implementation
   under the same recorded deviation.
+- RULE CHANGE 2026-11-10: the user removed the mandated cross-model
+  (GPT 6 Luna / GLM 5.3 Flash) subagent review. MISSION §17 and AGENTS.md
+  updated — subagent delegation is now optional; the orchestrator
+  implements and verifies directly. The deviations recorded above are
+  closed; no model-availability re-checks needed.
 - Next: commit + push Task G and the bug fixes (full `just ci` green), run
   the first benchmark suite, then 0.2.0 bump + annotated tag. NOTE: no git
   tags exist yet even though CHANGELOG has a 0.1.0 entry — resolve the tag
@@ -307,10 +312,9 @@
 - superjson/transformer support order (not scheduled before 0.3.0).
 - JSONL stream calls (`trpc-accept: application/jsonl`) recognized but JSONL
   responses unimplemented — batched stream calls get JSON envelopes.
-- Subagent-model rule: required GPT 6 Luna / GLM 5.3 Flash delegation is not
-  reachable in this environment (`run_subagent` exposes other profiles only;
-  `servers` MCP errors). SSE work proceeded without substituting models;
-  re-check availability each session.
+- Subagent-model rule: removed 2026-11-10 at user request (MISSION §17 +
+  AGENTS.md rewritten). Delegation is optional on any available model;
+  direct implementation is the default.
 - serde_json silently degrades input integer literals beyond the u64 range to
   floats (documented on `ParsedCall.input`); follow up with
   `arbitrary_precision` or core-level rejection before 1.0 (filed from task C
