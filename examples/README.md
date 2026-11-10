@@ -15,8 +15,16 @@ smoke-tested by the local CI gate via an `examples/<name>/smoke.sh` script.
 
 ## One per framework
 
-`fastapi-basic`, `starlette-basic`, `flask-basic`, `django-sync`,
-`django-async`, `standalone-server`.
+- `fastapi-basic` — FastAPI + `mount()`.
+- `starlette-basic` — Starlette routes + `mount()`/`mount_rest()`.
+- `flask-basic` — Flask + `mount_wsgi()`/`wsgi_from_asgi()` through
+  `DispatcherMiddleware`.
+- `django-sync` — Django (WSGI) + `trpc_view`/`asgi_view`.
+- `django-async` — Django (ASGI) + `trpc_view_async`/`asgi_view_async`.
+- `standalone-server` — planned (the standalone Rust server).
+
+Each serves the same router — queries, a mutation, REST + OpenAPI under
+`/api` — so the differences between adapters are visible at a glance.
 
 ## Combinations
 
