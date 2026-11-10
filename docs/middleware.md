@@ -133,6 +133,23 @@ router = Router(middleware=[
 ])
 ```
 
+### `tracing_middleware`
+
+`tracing_middleware(tracer=None)` opens an OpenTelemetry span named
+`trpc.<path>` around every call, sets `trpc.path`/`trpc.kind` attributes,
+and marks the span `ERROR` with the recorded exception on failure. It
+requires the optional `opentelemetry-api` package
+(`pip install opentelemetry-api`) — constructing it raises `RuntimeError`
+when that is missing. Pass any object with `start_as_current_span` as
+`tracer` to use your own tracer.
+
+```python
+from trpc_rs_py.middleware import tracing_middleware
+
+router = Router(middleware=[tracing_middleware()])
+# Or with your own tracer: tracing_middleware(trace.get_tracer("my-app"))
+```
+
 ## Auth example
 
 ```python

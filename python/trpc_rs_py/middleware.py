@@ -51,6 +51,7 @@ __all__ = [
     "require_auth",
     "run_middleware",
     "timing_middleware",
+    "tracing_middleware",
 ]
 
 _UNSET: Any = object()
@@ -223,6 +224,70 @@ def timing_middleware(
             return await next()
         finally:
             record(call, (time.perf_counter() - start) * 1000)
+
+    return middleware
+
+
+def tracing_middleware(tracer: Any = None) -> Middleware:
+    """Open a tracing span around every call (OpenTelemetry).
+
+    Each invocation runs inside a `trpc.<path>` span carrying
+    `trpc.path` and `trpc.kind` attributes. On error the span records
+    the exception and is marked `ERROR` before the error re-raises, so
+    the tRPC error envelope is unchanged.
+
+    Requires the optional `opentelemetry-api` package
+    (`pip install opentelemetry-api`); constructing the middleware
+    raises `RuntimeError` when it is not installed. Pass any object
+    implementing `start_as_current_span` as `tracer` — a real
+    `opentelemetry.trace.Tracer`, a testing tracer, or a stub.
+
+    Args:
+        tracer: Tracer to open spans on. Defaults to
+            `opentelemetry.trace.get_tracer("trpc_rs_py")`.
+
+    Returns:
+        A middleware opening one span per call.
+
+    Raises:
+        RuntimeError: If `opentelemetry-api` is not installed.
+
+    Example:
+        ```python
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+
+        trace.set_tracer_provider(TracerProvider())
+
+        from trpc_rs_py import Router
+        from trpc_rs_py.middleware import tracing_middleware
+
+        router = Router(middleware=[tracing_middleware()])
+        # Or your own tracer: tracing_middleware(trace.get_tracer("my-app"))
+        ```
+    """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.trace import Status, StatusCode
+    except ImportError as error:
+        msg = (
+            "tracing_middleware requires the optional 'opentelemetry-api' "
+            "package — install it to use tracing"
+        )
+        raise RuntimeError(msg) from error
+
+    active_tracer = trace.get_tracer("trpc_rs_py") if tracer is None else tracer
+
+    async def middleware(call: Call, next: Next) -> Any:
+        with active_tracer.start_as_current_span(f"trpc.{call.path}") as span:
+            span.set_attribute("trpc.path", call.path)
+            span.set_attribute("trpc.kind", call.kind.value)
+            try:
+                return await next()
+            except Exception as error:
+                span.record_exception(error)
+                span.set_status(Status(StatusCode.ERROR))
+                raise
 
     return middleware
 
