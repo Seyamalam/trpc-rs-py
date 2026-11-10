@@ -682,18 +682,28 @@ def django_test_client(
         return AsyncClient() if asynchronous else Client()
 
     override = override_settings(ROOT_URLCONF=urlconf)
-    if asynchronous:
+    raw = AsyncClient() if asynchronous else Client()
+    client: Any = raw
+    # Patch the instance's request() so each call runs under the synthetic
+    # urlconf without touching the caller's configured settings. Instance
+    # patching (rather than a local subclass) keeps stubtest happy — it
+    # flattens function-local class definitions into the module view.
+    client._trpc_urlconf_override = override
+    client._trpc_original_request = client.request
+    client.request = types.MethodType(
+        _trpc_overridden_request_async if asynchronous else _trpc_overridden_request,
+        client,
+    )
+    return raw
 
-        class _AsyncTestClient(AsyncClient):
-            async def request(self, **request: Any) -> Any:
-                with override:
-                    return await super().request(**request)
 
-        return _AsyncTestClient()
+def _trpc_overridden_request(self: Any, **request: Any) -> Any:
+    """Instance `request()` running under the stored urlconf override."""
+    with self._trpc_urlconf_override:
+        return self._trpc_original_request(**request)
 
-    class _TestClient(Client):
-        def request(self, **request: Any) -> Any:
-            with override:
-                return super().request(**request)
 
-    return _TestClient()
+async def _trpc_overridden_request_async(self: Any, **request: Any) -> Any:
+    """Async variant of `_trpc_overridden_request` for `AsyncClient`."""
+    with self._trpc_urlconf_override:
+        return await self._trpc_original_request(**request)
