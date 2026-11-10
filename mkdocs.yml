@@ -11,6 +11,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Framework Adapters: adapters.md
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md

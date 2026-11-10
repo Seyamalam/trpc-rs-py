@@ -1,0 +1,114 @@
+# Framework Adapters
+
+One `Router` serves identically through every adapter — the same dispatch
+code runs everywhere (ADR 0010), so batching, error envelopes, typed errors,
+SSE subscriptions, and REST/OpenAPI output behave the same on all of them.
+The official `@trpc/client` compatibility suite runs the full protocol
+matrix against all five adapters; see `clients/ts-tests`.
+
+| Adapter | Helper | Server model | SSE |
+|---|---|---|---|
+| ASGI (FastAPI, Starlette) | `mount(router)` | async | native streaming |
+| WSGI (Flask, Werkzeug) | `mount_wsgi(router)`, `attach_flask(app, router)` | sync, per-request pumped loop | streams, one worker per stream |
+| Django sync | `trpc_view(router)` / `trpc_urlpatterns(router)` | sync, per-request pumped loop | streams, one worker per stream |
+| Django async | `trpc_view_async(router)` / `trpc_urlpatterns(router, asynchronous=True)` | async inside Django's loop | native streaming |
+
+## ASGI (FastAPI, Starlette)
+
+```python
+from fastapi import FastAPI
+from trpc_rs_py import mount, mount_rest
+
+app = FastAPI()
+app.mount("/trpc", mount(router))
+app.mount("/api", mount_rest(router))
+```
+
+Starlette uses the same `Mount("/trpc", app=mount(router))` route. This is
+the reference adapter — SSE runs on the server's own loop with pull-based
+backpressure.
+
+## WSGI (Flask and friends)
+
+`mount_wsgi(router)` returns a plain WSGI callable. Each request gets a
+private event loop pumping the ASGI app (`serve_asgi_sync`); `send()`
+messages travel a bounded queue so consumers apply real backpressure, and
+closing the response iterable cancels the coroutine.
+
+```python
+from flask import Flask
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from trpc_rs_py import mount_rest, mount_wsgi, wsgi_from_asgi
+
+app = Flask(__name__)
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    "/trpc": mount_wsgi(router),
+    "/api": wsgi_from_asgi(mount_rest(router)),
+})
+```
+
+- `attach_flask(app, router, path="/trpc")` — one-call convenience for a
+  tRPC-only mount.
+- `wsgi_from_asgi(asgi_app)` — wraps **any** ASGI `http` app (REST,
+  OpenAPI doc, custom stacks) as a WSGI callable.
+
+### WSGI streaming limitations
+
+SSE subscriptions work through WSGI, with two limitations you should plan
+around:
+
+1. **One worker thread per open stream.** A WSGI server has no event loop;
+   the bridge holds a worker for the stream's lifetime. Size worker pools
+   (gunicorn `--threads`, uwsgi `workers`) with concurrent-subscriber
+   counts in mind. High-subscription workloads belong on an ASGI adapter.
+2. **Disconnects are noticed on write.** The bridge learns a client went
+   away when the WSGI server calls `close()` on the response iterable or a
+   send fails — not instantly. Set `sse_ping_interval` (e.g. `5.0`) so idle
+   streams produce writes that surface dead connections and reap workers.
+
+The bridge also strips RFC 7230 hop-by-hop headers (`connection`,
+`keep-alive`, …) from responses, which strict WSGI servers such as wsgiref
+require.
+
+## Django
+
+Import from `trpc_rs_py.django` — Django stays an optional dependency.
+
+```python
+# urls.py
+from django.urls import path
+from trpc_rs_py import mount_rest
+from trpc_rs_py.django import asgi_view, urlpatterns as trpc_urlpatterns
+
+urlpatterns = [
+    *trpc_urlpatterns(router),                          # /trpc/*
+    path("api/<path:path>", asgi_view(mount_rest(router))),  # /api/*
+]
+```
+
+- `trpc_view(router)` — the **sync** view. Runs the ASGI dispatch on a
+  per-request pumped loop, same semantics and limitations as WSGI. The
+  right default for WSGI deployments (`wsgi.py`, gunicorn, uwsgi).
+- `trpc_view_async(router)` — the **async** view. Drives the ASGI app on
+  Django's own loop; SSE streams with real pull-based backpressure and no
+  worker threads. Use under `get_asgi_application()` + an ASGI server
+  (`trpc_urlpatterns(router, asynchronous=True)` is the shorthand).
+- `asgi_view` / `asgi_view_async` — the generic helpers: turn **any** ASGI
+  `http` app (for example `mount_rest(router)`) into a Django view. The URL
+  pattern must capture the remaining path under the converter name `path`,
+  e.g. `path("api/<path:path>", asgi_view(rest_app))`.
+- `trpc_urlpatterns(router, prefix="trpc", asynchronous=False, ...)`
+  returns `path()` entries for an `urlpatterns` list and forwards the
+  `mount()` options (`production`, `limits`, `sse_ping_interval`,
+  `max_sse_event_size`).
+
+## Proof
+
+- Unit tests: `tests/test_asgi.py`, `tests/test_wsgi.py`,
+  `tests/test_django.py`.
+- Wire compat: `clients/ts-tests` runs every official-client protocol test
+  (queries, mutations, batching, error shapes, typed errors, SSE, REST,
+  OpenAPI) against FastAPI, Starlette, Flask, Django sync, and Django async
+  — 102 tests, all passing.
+- Runnable examples: `examples/fastapi-basic`, `starlette-basic`,
+  `flask-basic`, `django-sync`, `django-async`.

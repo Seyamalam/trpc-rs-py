@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.testclient import TestClient
 
-from trpc_rs_py import Router, generate_types, mount
+from trpc_rs_py import Router, generate_types, mount, mount_wsgi
 
 
 def _router() -> Router:
@@ -31,6 +31,49 @@ def test_trpc_query_overhead(benchmark) -> None:
     app = Starlette(routes=[Mount("/trpc", app=mount(_router(), production=True))])
     with TestClient(app) as client:
         response = benchmark(client.get, "/trpc/greet", params={"input": '{"name":"ada"}'})
+    assert response.status_code == 200
+    assert response.json() == {"result": {"data": "Hello ada"}}
+
+
+def test_trpc_query_overhead_wsgi(benchmark) -> None:
+    """WSGI adapter overhead: per-request pumped loop vs. the async path."""
+    from werkzeug.test import Client
+    from werkzeug.wrappers import Response
+
+    app = mount_wsgi(_router(), production=True)
+    client = Client(app, Response)
+    response = benchmark(client.get, "/trpc/greet", query_string={"input": '{"name":"ada"}'})
+    assert response.status_code == 200
+    assert response.json == {"result": {"data": "Hello ada"}}
+
+
+def test_trpc_query_overhead_django(benchmark) -> None:
+    """Django sync-view overhead: pumped loop plus Django request plumbing."""
+    import django
+    from django.conf import settings
+
+    if not settings.configured:
+        settings.configure(
+            DEBUG=False,
+            ALLOWED_HOSTS=["*"],
+            ROOT_URLCONF=__name__,
+            SECRET_KEY="bench",
+            DATABASES={},
+            INSTALLED_APPS=["django.contrib.contenttypes"],
+        )
+        django.setup()
+
+    global urlpatterns  # noqa: PLW0603 - ROOT_URLCONF points at this module
+    from trpc_rs_py.django import urlpatterns as trpc_urlpatterns
+
+    urlpatterns = trpc_urlpatterns(_router(), production=True)
+
+    from django.test import Client
+
+    client = Client()
+    response = benchmark(
+        client.get, "/trpc/greet", {"input": '{"name":"ada"}'}
+    )
     assert response.status_code == 200
     assert response.json() == {"result": {"data": "Hello ada"}}
 
