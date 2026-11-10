@@ -26,7 +26,15 @@ from trpc_rs_py import (
     mount_rest,
     mount_wsgi,
 )
-from trpc_rs_py.middleware import Call, Next, logging_middleware, timing_middleware
+from trpc_rs_py.middleware import (
+    Call,
+    Next,
+    logging_middleware,
+    rate_limit,
+    require_auth,
+    run_middleware,
+    timing_middleware,
+)
 from trpc_rs_py.router import ProcedureKind
 
 
@@ -721,4 +729,184 @@ class TestDjangoMiddleware:
 
         response = asyncio.run(run())
         assert response.json()["result"]["data"] == "pong"
+        assert hits == ["ping"]
+
+
+def _user_factory(request: RequestContext) -> dict[str, Any]:
+    return {"user": request.headers.get("x-user")}
+
+
+class TestRateLimit:
+    def _ping_router(self, rpm: float, key: Any = None) -> Router:
+        router = Router(middleware=[rate_limit(rpm, key=key)])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        return router
+
+    def test_allows_burst_then_too_many_requests(self) -> None:
+        client = TestClient(mount(self._ping_router(2)))
+        assert client.get("/trpc/ping").json()["result"]["data"] == "pong"
+        assert client.get("/trpc/ping").json()["result"]["data"] == "pong"
+        response = client.get("/trpc/ping")
+        assert response.status_code == 429
+        error = response.json()["error"]
+        assert error["message"] == "Rate limit exceeded"
+        assert error["data"]["code"] == "TOO_MANY_REQUESTS"
+
+    def test_buckets_are_independent_per_key(self) -> None:
+        router = Router(middleware=[rate_limit(1, key=lambda call: call.path)])
+
+        @router.query
+        def first() -> str:
+            return "1"
+
+        @router.query
+        def second() -> str:
+            return "2"
+
+        client = TestClient(mount(router))
+        assert client.get("/trpc/first").status_code == 200
+        assert client.get("/trpc/second").status_code == 200
+        assert client.get("/trpc/first").status_code == 429
+        assert client.get("/trpc/second").status_code == 429
+
+    def test_custom_key_callable_partitions_by_header(self) -> None:
+        key = lambda call: call.request_context.headers.get("x-user", "anon")  # noqa: E731
+        client = TestClient(mount(self._ping_router(1, key=key)))
+        assert client.get("/trpc/ping", headers={"x-user": "ada"}).status_code == 200
+        assert client.get("/trpc/ping", headers={"x-user": "bob"}).status_code == 200
+        assert client.get("/trpc/ping", headers={"x-user": "ada"}).status_code == 429
+
+    def test_missing_client_falls_back_to_shared_bucket(self) -> None:
+        request_context = RequestContext(
+            method="GET",
+            path="/trpc/ping",
+            query_string="",
+            headers={},
+            raw_headers=(),
+            client=None,
+            request=None,
+        )
+        call = Call(
+            path="ping",
+            kind=ProcedureKind.QUERY,
+            input=None,
+            ctx=None,
+            request_context=request_context,
+        )
+
+        async def terminal(current: Call) -> str:
+            return "ok"
+
+        middleware = rate_limit(1)
+        assert asyncio.run(run_middleware((middleware,), call, terminal)) == "ok"
+        with pytest.raises(TRPCError) as excinfo:
+            asyncio.run(run_middleware((middleware,), call, terminal))
+        assert excinfo.value.code is TRPCErrorCode.TOO_MANY_REQUESTS
+
+    @pytest.mark.parametrize("rpm", [0, -5])
+    def test_non_positive_rate_raises_value_error(self, rpm: float) -> None:
+        with pytest.raises(ValueError, match="requests_per_minute"):
+            rate_limit(rpm)
+
+    def test_composes_with_other_middleware(self) -> None:
+        hits: list[str] = []
+
+        async def tag(call: Call, next: Next) -> Any:
+            hits.append(call.path)
+            return await next()
+
+        router = Router(middleware=[rate_limit(5), tag])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        client = TestClient(mount(router, middleware=[tag]))
+        assert client.get("/trpc/ping").status_code == 200
+        assert hits == ["ping", "ping"]
+        assert client.get("/trpc/ping").status_code == 200
+        assert hits == ["ping", "ping", "ping", "ping"]
+
+
+class TestRequireAuth:
+    def test_falsy_ctx_is_unauthorized(self) -> None:
+        router = Router(middleware=[require_auth(lambda ctx: ctx.get("user"))])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        response = TestClient(mount(router, context_factory=_user_factory)).get("/trpc/ping")
+        assert response.status_code == 401
+        error = response.json()["error"]
+        assert error["message"] == "Unauthorized"
+        assert error["data"]["code"] == "UNAUTHORIZED"
+
+    def test_truthy_ctx_runs_handler(self) -> None:
+        router = Router(middleware=[require_auth(lambda ctx: ctx.get("user"))])
+
+        @router.query
+        def whoami(ctx) -> str:
+            return ctx["user"]
+
+        client = TestClient(mount(router, context_factory=_user_factory))
+        response = client.get("/trpc/whoami", headers={"x-user": "ada"})
+        assert response.json()["result"]["data"] == "ada"
+
+    def test_async_predicate_is_awaited(self) -> None:
+        async def is_admin(ctx: Any) -> bool:
+            await asyncio.sleep(0)
+            return ctx.get("role") == "admin"
+
+        router = Router(middleware=[require_auth(is_admin)])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        def factory(request: RequestContext) -> dict[str, Any]:
+            return {"role": request.headers.get("x-role")}
+
+        client = TestClient(mount(router, context_factory=factory))
+        assert client.get("/trpc/ping", headers={"x-role": "admin"}).status_code == 200
+        assert client.get("/trpc/ping", headers={"x-role": "guest"}).status_code == 401
+
+    def test_predicate_sees_context_factory_ctx(self) -> None:
+        seen: list[Any] = []
+
+        def predicate(ctx: Any) -> bool:
+            seen.append(ctx)
+            return True
+
+        router = Router(middleware=[require_auth(predicate)])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        client = TestClient(mount(router, context_factory=_user_factory))
+        client.get("/trpc/ping", headers={"x-user": "ada"})
+        assert seen == [{"user": "ada"}]
+
+    def test_composes_with_other_middleware(self) -> None:
+        hits: list[str] = []
+
+        async def tag(call: Call, next: Next) -> Any:
+            hits.append(call.path)
+            return await next()
+
+        router = Router(middleware=[require_auth(lambda ctx: ctx.get("user")), tag])
+
+        @router.query
+        def ping() -> str:
+            return "pong"
+
+        client = TestClient(mount(router, context_factory=_user_factory))
+        assert client.get("/trpc/ping", headers={"x-user": "ada"}).status_code == 200
+        assert client.get("/trpc/ping").status_code == 401
+        # tag sits inside require_auth: only the authorized call reaches it.
         assert hits == ["ping"]

@@ -30,10 +30,13 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
+import threading
 import time
 from collections.abc import Awaitable, Callable, MutableMapping
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
+
+from .errors import TRPCError, TRPCErrorCode
 
 if TYPE_CHECKING:
     from .context import RequestContext
@@ -44,6 +47,8 @@ __all__ = [
     "Middleware",
     "Next",
     "logging_middleware",
+    "rate_limit",
+    "require_auth",
     "run_middleware",
     "timing_middleware",
 ]
@@ -218,5 +223,143 @@ def timing_middleware(
             return await next()
         finally:
             record(call, (time.perf_counter() - start) * 1000)
+
+    return middleware
+
+
+def _default_rate_limit_key(call: Call) -> str:
+    """Bucket key for `rate_limit`: the client IP, or `"-"` without one."""
+    request_context = call.request_context
+    if request_context is not None and request_context.client:
+        return request_context.client[0]
+    return "-"
+
+
+@dataclass
+class _TokenBucket:
+    """Mutable token-bucket state for one `rate_limit` key.
+
+    Attributes:
+        tokens: Current token count (fractional; refilled lazily).
+        updated: `time.monotonic()` timestamp of the last access, used for
+            idle eviction.
+    """
+
+    tokens: float
+    updated: float
+
+
+def rate_limit(
+    requests_per_minute: float,
+    key: Callable[[Call], str] | None = None,
+) -> Middleware:
+    """Limit calls per key with an in-process token bucket.
+
+    Each distinct key gets its own bucket: capacity `requests_per_minute`
+    (burst), refilled at `requests_per_minute / 60` tokens per second on a
+    `time.monotonic()` clock, one token per call. An empty bucket raises
+    `TRPCError` with code `TOO_MANY_REQUESTS` (HTTP 429).
+
+    Buckets idle longer than ten full-refill times are evicted lazily on
+    access, so untrusted keys cannot grow memory without bound. State is
+    guarded by a `threading.Lock` — safe on event loops and WSGI worker
+    threads alike. This is per-process: run multiple workers and each
+    enforces its own limit.
+
+    Args:
+        requests_per_minute: Burst capacity and sustained rate per minute;
+            must be `> 0`.
+        key: Bucket key extractor, called per invocation. Defaults to the
+            client IP from `call.request_context.client`, falling back to a
+            shared `"-"` bucket when no client address is available (e.g.
+            direct unit calls), so those calls are still limited.
+
+    Returns:
+        A middleware enforcing the limit.
+
+    Raises:
+        ValueError: If `requests_per_minute` is not positive.
+
+    Example:
+        ```python
+        from trpc_rs_py import Router
+        from trpc_rs_py.middleware import rate_limit
+
+        router = Router(middleware=[rate_limit(120)])
+        # Per-user limit instead of per-IP:
+        # rate_limit(30, key=lambda call: call.ctx["user_id"])
+        ```
+    """
+    if requests_per_minute <= 0:
+        msg = f"requests_per_minute must be > 0, got {requests_per_minute}"
+        raise ValueError(msg)
+    capacity = float(requests_per_minute)
+    refill_per_second = capacity / 60.0
+    idle_ttl = 10.0 * capacity / refill_per_second
+    lock = threading.Lock()
+    buckets: dict[str, _TokenBucket] = {}
+    resolve_key = key if key is not None else _default_rate_limit_key
+
+    def take(bucket_key: str) -> bool:
+        now = time.monotonic()
+        with lock:
+            stale = [name for name, b in buckets.items() if now - b.updated > idle_ttl]
+            for name in stale:
+                del buckets[name]
+            bucket = buckets.get(bucket_key)
+            if bucket is None:
+                bucket = _TokenBucket(tokens=capacity, updated=now)
+                buckets[bucket_key] = bucket
+            else:
+                bucket.tokens = min(
+                    capacity, bucket.tokens + (now - bucket.updated) * refill_per_second
+                )
+                bucket.updated = now
+            if bucket.tokens < 1.0:
+                return False
+            bucket.tokens -= 1.0
+            return True
+
+    async def middleware(call: Call, next: Next) -> Any:
+        if not take(resolve_key(call)):
+            raise TRPCError("Rate limit exceeded", code=TRPCErrorCode.TOO_MANY_REQUESTS)
+        return await next()
+
+    return middleware
+
+
+def require_auth(predicate: Callable[[Any], Any]) -> Middleware:
+    """Gate calls on a predicate over `call.ctx`.
+
+    The predicate is invoked with the context object for each call; it may
+    be sync or async (an awaitable result is awaited). A falsy verdict
+    raises `TRPCError` with code `UNAUTHORIZED` (HTTP 401); a truthy one
+    runs the rest of the chain.
+
+    Args:
+        predicate: `(ctx) -> Any` deciding whether the call proceeds. Read
+            whatever your `context_factory` put on `ctx`.
+
+    Returns:
+        A middleware enforcing the predicate.
+
+    Example:
+        ```python
+        from trpc_rs_py import Router
+        from trpc_rs_py.middleware import require_auth
+
+        router = Router(
+            middleware=[require_auth(lambda ctx: ctx is not None and ctx.get("user"))]
+        )
+        ```
+    """
+
+    async def middleware(call: Call, next: Next) -> Any:
+        verdict = predicate(call.ctx)
+        if inspect.isawaitable(verdict):
+            verdict = await verdict
+        if not verdict:
+            raise TRPCError("Unauthorized", code=TRPCErrorCode.UNAUTHORIZED)
+        return await next()
 
     return middleware

@@ -103,6 +103,36 @@ call's duration in milliseconds; the default sink writes
 `trpc_duration_ms` attribute otherwise. Pass `sink=(call, ms) -> ...` to
 record elsewhere.
 
+### `rate_limit`
+
+`rate_limit(requests_per_minute, key=None)` enforces an in-process token
+bucket per key — burst capacity `requests_per_minute`, refilled at
+`requests_per_minute / 60` tokens per second. The default key is the
+client IP (`call.request_context.client`), falling back to a shared
+bucket when no client address exists. Exceeding the limit raises
+`TOO_MANY_REQUESTS` (HTTP 429); idle buckets are evicted lazily and state
+is lock-guarded, so it is safe on event loops and WSGI threads alike.
+
+```python
+from trpc_rs_py.middleware import rate_limit
+
+router = Router(middleware=[rate_limit(120)])                    # per IP
+# or rate_limit(30, key=lambda call: call.ctx["user_id"])        # per user
+```
+
+### `require_auth`
+
+`require_auth(predicate)` calls `predicate(call.ctx)` — sync or async —
+and raises `UNAUTHORIZED` (HTTP 401) on a falsy verdict:
+
+```python
+from trpc_rs_py.middleware import require_auth
+
+router = Router(middleware=[
+    require_auth(lambda ctx: ctx is not None and ctx.get("user")),
+])
+```
+
 ## Auth example
 
 ```python
