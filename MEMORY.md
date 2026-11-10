@@ -5,16 +5,16 @@
 
 ## Current version and milestone
 
-- Version: **0.4.0 released** (`v0.4.0` tag pushed 2026-11-10, wheel in
-  `target/wheels/`); 0.5.0 in progress — WSGI (Flask) + Django (sync/async)
-  adapters, examples, backend-only init templates all shipped and pushed
-  (`ecf6bb0`, `755bda5`, `899c35a`, `ab6fe6c`, `556fcdc`, `9e20303`);
-  remaining: release.
+- Version: **0.5.0 released** (`v0.5.0` tag pushed 2026-11-10, release commit
+  `f44ddc7`, wheel in `target/wheels/`); benchmark artifacts committed
+  `0e91126`. All 0.5.0 scope shipped — WSGI (Flask) + Django (sync/async)
+  adapters, 4 framework examples, 3 backend-only init templates, adapters
+  doc, feature-matrix updates, adapter benchmarks.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
-- Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0: more
-  adapters — WSGI (Flask) and Django (sync and async), examples, remaining
-  templates, WSGI streaming-limitation docs** (user approved via "lets do
-  the next version").
+- Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0 done** →
+  0.6.0 scope open (MISSION leftovers: standalone Rust server, JSONL
+  streams, more npm packages, playground, middleware/CORS/CSRF/rate
+  limiting/tracing, Python client, security hardening).
 
 ## What is done
 
@@ -282,27 +282,24 @@
    the 0.3.0 benchmark numbers stand. Next: agree 0.5.0 scope with the user
    (MISSION leftovers — Flask/Django adapters, standalone server, JSONL
    streams, more npm packages).
-- 0.5.0 (in progress; all code pushed, release pending). ADR 0010 settled the
-  design: ONE dispatch path — sync contexts drive the ASGI app on a
-  per-request pumped event loop in a daemon thread (`_bridge.serve_asgi_sync`,
-  bounded Queue(maxsize=1) for real backpressure, `close()` cancels).
-  Shipped: `mount_wsgi`/`attach_flask`/`wsgi_from_asgi` (WSGI + Flask),
-  `trpc_rs_py.django` (`trpc_view`/`trpc_view_async`/`trpc_urlpatterns` +
-  generic `asgi_view`/`asgi_view_async` for REST mounts — converter name
-  `path`). Compat suite now runs all 102 official-client tests against five
-  adapters (fastapi, starlette, flask, django_sync, django_async); 361
-  pytest; 7 example smokes + 3 template smokes in the gate. Bugs the new
-  smokes caught: (1) `asyncio.to_thread` executor threads (non-daemon)
-  blocked forever on the full send queue → hung pytest/push; replaced with
-  cancellable `put_nowait` polling. (2) wsgiref sends `Content-Length: ""`
-  on GETs → stripped in `_scope_from_request`. (3) SSE `connection:
-  keep-alive` is hop-by-hop → `strip_hop_by_hop` in the bridge (wsgiref
-  asserted otherwise). Adapter micros (M5 Pro): ASGI ~506µs, WSGI ~1558µs,
-  Django sync ~1565µs — the pumped-loop + worker-thread cost, documented in
-  docs/adapters.md with the WSGI streaming limits. Templates `fastapi-only`/
-  `flask-only`/`django-only` scaffold via `trpc-py init --template`; each
-  has a gate smoke (scaffold→serve→curl tRPC+REST+SSE+OpenAPI). Remaining
-  for 0.5.0: CHANGELOG→release.sh→v0.5.0 tag→`benchmarks/run.py` artifacts.
+- 0.5.0 released (`v0.5.0`, release commit `f44ddc7`; benchmark artifacts
+  `0e91126`). ADR 0010 settled the design: ONE dispatch path — sync contexts
+  drive the ASGI app on a per-request pumped event loop in a daemon thread
+  (`_bridge.serve_asgi_sync`, bounded Queue(maxsize=1) for real backpressure,
+  `close()` cancels). Shipped: `mount_wsgi`/`attach_flask`/`wsgi_from_asgi`
+  (WSGI + Flask), `trpc_rs_py.django` (`trpc_view`/`trpc_view_async`/
+  `trpc_urlpatterns` + generic `asgi_view`/`asgi_view_async` for REST mounts —
+  converter name `path`). Compat suite runs all 102 official-client tests
+  against five adapters (fastapi, starlette, flask, django_sync,
+  django_async); 361 pytest; 7 example smokes + 3 template smokes in the
+  gate. Bugs the new smokes caught: (1) `asyncio.to_thread` executor threads
+  (non-daemon) blocked forever on the full send queue → hung pytest/push;
+  replaced with cancellable `put_nowait` polling. (2) wsgiref sends
+  `Content-Length: ""` on GETs → stripped in `_scope_from_request`. (3) SSE
+  `connection: keep-alive` is hop-by-hop → `strip_hop_by_hop` in the bridge
+  (wsgiref asserted otherwise). Templates `fastapi-only`/`flask-only`/
+  `django-only` scaffold via `trpc-py init --template`; each has a gate smoke
+  (scaffold→serve→curl tRPC+REST+SSE+OpenAPI).
 
 ## Open questions
 
@@ -352,17 +349,19 @@
 
 ## Latest benchmark headline numbers
 
-- **0.3.0 run** (M5 Pro, 16 conns, 5s; method + raw JSON in
-  `benchmarks/results/0.3.0/`, charts in `docs/benchmarks/`): trpc-fastapi
-  16,269 req/s single query (p99 1.08 ms) vs plain FastAPI 11,203 req/s
-  (p99 1.97 ms) — the mount is ~45% faster than a plain JSON view, ~2x on
-  100 KB payloads (6,547 vs 3,204 req/s). Node `@trpc/server` standalone is
-  ~2.3x faster on small requests (37,553 req/s) — Python dispatch dominates,
-  as expected. Adapter micros are within noise of the baseline (~466 µs
-  both). `generate_types`: 125 µs @10, 620 µs @50, 2,400 µs @200 procedures.
-  Rust micros: route lookup 7.4 ns, single-call parse 158–203 ns.
+- **0.5.0 run** (M5 Pro, 16 conns, 5s; method + raw JSON in
+  `benchmarks/results/0.5.0/`, charts in `docs/benchmarks/`): trpc-fastapi
+  15,079 req/s single query (p99 2.13 ms) vs plain FastAPI 11,808 req/s
+  (p99 1.89 ms) — the mount is ~28% faster than a plain JSON view, ~2x on
+  100 KB payloads (6,522 vs 3,161 req/s). Node `@trpc/server` standalone is
+  ~2.3x faster on small requests (35,117 req/s) — Python dispatch dominates,
+  as expected. ASGI adapter micro ~512 µs (within noise of the ~556 µs
+  baseline); WSGI ~1,536 µs and Django sync ~1,604 µs — the ~1 ms pumped-loop
+  + worker-thread bridge cost, documented in docs/adapters.md.
+  `generate_types`: 139 µs @10, 686 µs @50, 2,795 µs @200 procedures. Rust
+  micros: route lookup 7.7 ns, single-call parse 179–238 ns.
 - SSE/streaming load benchmarks still deferred (functional coverage shipped
-  with 0.3.0).
+  with 0.3.0); WSGI/Django HTTP-load (oha) baselines deferred to 0.7.0.
 
 ## User feedback from the launch
 
