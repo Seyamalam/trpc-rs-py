@@ -1,19 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="240" viewBox="0 0 980 240" font-family="sans-serif">
-<rect width="980" height="240" fill="#ffffff"/>
-<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Python adapter & codegen — mean µs (0.3.0)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="300" viewBox="0 0 980 300" font-family="sans-serif">
+<rect width="980" height="300" fill="#ffffff"/>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Python adapter & codegen — mean µs (0.5.0)</text>
 <text x="290" y="75" font-size="13" text-anchor="end" fill="#333">trpc_query_overhead</text>
-<rect x="300" y="60" width="104.8" height="20" fill="#2563eb"/>
-<text x="412.8" y="75" font-size="13" fill="#111">465.7 µs</text>
-<text x="290" y="105" font-size="13" text-anchor="end" fill="#333">plain_json_query_baseline</text>
-<rect x="300" y="90" width="105.1" height="20" fill="#2563eb"/>
-<text x="413.1" y="105" font-size="13" fill="#111">466.9 µs</text>
-<text x="290" y="135" font-size="13" text-anchor="end" fill="#333">codegen_types[p10]</text>
-<rect x="300" y="120" width="28.1" height="20" fill="#2563eb"/>
-<text x="336.1" y="135" font-size="13" fill="#111">124.7 µs</text>
-<text x="290" y="165" font-size="13" text-anchor="end" fill="#333">codegen_types[p50]</text>
-<rect x="300" y="150" width="139.5" height="20" fill="#2563eb"/>
-<text x="447.5" y="165" font-size="13" fill="#111">619.9 µs</text>
-<text x="290" y="195" font-size="13" text-anchor="end" fill="#333">codegen_types[p200]</text>
-<rect x="300" y="180" width="540.0" height="20" fill="#2563eb"/>
-<text x="848.0" y="195" font-size="13" fill="#111">2,399.8 µs</text>
+<rect x="300" y="60" width="98.9" height="20" fill="#2563eb"/>
+<text x="406.9" y="75" font-size="13" fill="#111">511.7 µs</text>
+<text x="290" y="105" font-size="13" text-anchor="end" fill="#333">trpc_query_overhead_wsgi</text>
+<rect x="300" y="90" width="296.7" height="20" fill="#2563eb"/>
+<text x="604.7" y="105" font-size="13" fill="#111">1,535.7 µs</text>
+<text x="290" y="135" font-size="13" text-anchor="end" fill="#333">trpc_query_overhead_django</text>
+<rect x="300" y="120" width="309.9" height="20" fill="#2563eb"/>
+<text x="617.9" y="135" font-size="13" fill="#111">1,604.0 µs</text>
+<text x="290" y="165" font-size="13" text-anchor="end" fill="#333">plain_json_query_baseline</text>
+<rect x="300" y="150" width="107.3" height="20" fill="#2563eb"/>
+<text x="415.3" y="165" font-size="13" fill="#111">555.6 µs</text>
+<text x="290" y="195" font-size="13" text-anchor="end" fill="#333">codegen_types[p10]</text>
+<rect x="300" y="180" width="26.9" height="20" fill="#2563eb"/>
+<text x="334.9" y="195" font-size="13" fill="#111">139.4 µs</text>
+<text x="290" y="225" font-size="13" text-anchor="end" fill="#333">codegen_types[p50]</text>
+<rect x="300" y="210" width="132.5" height="20" fill="#2563eb"/>
+<text x="440.5" y="225" font-size="13" fill="#111">685.8 µs</text>
+<text x="290" y="255" font-size="13" text-anchor="end" fill="#333">codegen_types[p200]</text>
+<rect x="300" y="240" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="255" font-size="13" fill="#111">2,795.0 µs</text>
 </svg>
