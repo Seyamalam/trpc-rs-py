@@ -15,10 +15,13 @@ nav:
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md
+  - Vercel AI SDK: ai-sdk.md
   - Context: context.md
   - Middleware: middleware.md
   - CORS: cors.md
   - CSRF: csrf.md
+  - Playground: playground.md
+  - Testing: testing.md
   - Typed errors: typed-errors.md
   - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md
@@ -46,3 +49,4 @@ nav:
       - 0009 Typed errors: decisions/0009-typed-errors.md
       - 0010 WSGI/Django adapter bridge: decisions/0010-wsgi-django-adapter-bridge.md
       - 0011 Context and middleware: decisions/0011-context-and-middleware.md
+      - 0012 Vercel AI SDK transport: decisions/0012-vercel-ai-sdk.md

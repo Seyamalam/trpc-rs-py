@@ -29,8 +29,21 @@
   `csrf_protect()` (pre-dispatch filter on credentialed requests —
   Sec-Fetch-Site safe values allow, cross-site requires exact Origin,
   fixed 403 body) — both work on all adapters via the ADR 0010 bridge.
-  496 total tests. Next: `tracing_middleware` (optional otel), test
-  clients, playground, Vercel AI SDK helpers, CLI `--json`.
+  Developer tooling shipped: `tracing_middleware` (optional
+  `opentelemetry-api`, hard-fail RuntimeError when missing, one
+  `trpc.<path>` span per call w/ path+kind attrs); `trpc_rs_py.testing`
+  (dependency-free in-process `test_client` driving real `mount()` via
+  asyncio.run — `query`/`mutation`/`batch`/`subscribe` +
+  `TrpcTestClientError`, plus lazy `flask_test_client`/`django_test_client`
+  wrappers); `/trpc/panel` playground (`panel=` on mount/attach/WSGI/
+  Django — dev-default on, prod off unless explicit; introspection JSON
+  at `/panel/schema`, vendored HTML/JS, no CDN); Vercel AI SDK helpers
+  in `streaming.py` (ADR 0012 chose a dedicated `ai_sdk_endpoint` ASGI
+  app over a custom tRPC transport — `useChat` needs zero custom TS;
+  `ai_text_stream`/`ai_message_stream`/`ai_data_part` emit UI-message-
+  stream v1 chunks yieldable from subscriptions too); `check --json`
+  + enriched `routes --json` (input/output/errors keys). 595 total
+  tests. Next: benchmarks + changelog → `scripts/release.sh 0.6.0`.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0 done** →
   0.6.0 scope open (MISSION leftovers: standalone Rust server, JSONL
   streams, more npm packages, playground, middleware/CORS/CSRF/rate
