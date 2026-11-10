@@ -1,6 +1,6 @@
 {
   "name": "@trpc-rs-py/link",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Migration link for moving a Node tRPC app to trpc-rs-py one procedure at a time",
   "type": "module",
   "exports": {
