@@ -1,28 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="330" viewBox="0 0 980 330" font-family="sans-serif">
 <rect width="980" height="330" fill="#ffffff"/>
-<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Rust core hot paths — mean ns (0.5.0)</text>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">Rust core hot paths — mean ns (0.6.0)</text>
 <text x="290" y="75" font-size="13" text-anchor="end" fill="#333">build_response_batch_10</text>
-<rect x="300" y="60" width="530.2" height="20" fill="#2563eb"/>
-<text x="838.2" y="75" font-size="13" fill="#111">2,097.7 ns</text>
+<rect x="300" y="60" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="75" font-size="13" fill="#111">2,709.6 ns</text>
 <text x="290" y="105" font-size="13" text-anchor="end" fill="#333">build_response_single</text>
-<rect x="300" y="90" width="53.9" height="20" fill="#2563eb"/>
-<text x="361.9" y="105" font-size="13" fill="#111">213.4 ns</text>
+<rect x="300" y="90" width="53.5" height="20" fill="#2563eb"/>
+<text x="361.5" y="105" font-size="13" fill="#111">268.5 ns</text>
 <text x="290" y="135" font-size="13" text-anchor="end" fill="#333">error_envelope</text>
-<rect x="300" y="120" width="96.6" height="20" fill="#2563eb"/>
-<text x="404.6" y="135" font-size="13" fill="#111">382.4 ns</text>
+<rect x="300" y="120" width="79.4" height="20" fill="#2563eb"/>
+<text x="387.4" y="135" font-size="13" fill="#111">398.2 ns</text>
 <text x="290" y="165" font-size="13" text-anchor="end" fill="#333">parse_batch_10_get</text>
-<rect x="300" y="150" width="540.0" height="20" fill="#2563eb"/>
-<text x="848.0" y="165" font-size="13" fill="#111">2,136.6 ns</text>
+<rect x="300" y="150" width="457.0" height="20" fill="#2563eb"/>
+<text x="765.0" y="165" font-size="13" fill="#111">2,293.1 ns</text>
 <text x="290" y="195" font-size="13" text-anchor="end" fill="#333">parse_batch_10_post</text>
-<rect x="300" y="180" width="493.2" height="20" fill="#2563eb"/>
-<text x="801.2" y="195" font-size="13" fill="#111">1,951.4 ns</text>
+<rect x="300" y="180" width="409.7" height="20" fill="#2563eb"/>
+<text x="717.7" y="195" font-size="13" fill="#111">2,055.9 ns</text>
 <text x="290" y="225" font-size="13" text-anchor="end" fill="#333">parse_single_get</text>
-<rect x="300" y="210" width="60.2" height="20" fill="#2563eb"/>
-<text x="368.2" y="225" font-size="13" fill="#111">238.0 ns</text>
+<rect x="300" y="210" width="46.4" height="20" fill="#2563eb"/>
+<text x="354.4" y="225" font-size="13" fill="#111">233.0 ns</text>
 <text x="290" y="255" font-size="13" text-anchor="end" fill="#333">parse_single_post</text>
-<rect x="300" y="240" width="45.3" height="20" fill="#2563eb"/>
-<text x="353.3" y="255" font-size="13" fill="#111">179.4 ns</text>
+<rect x="300" y="240" width="73.3" height="20" fill="#2563eb"/>
+<text x="381.3" y="255" font-size="13" fill="#111">367.7 ns</text>
 <text x="290" y="285" font-size="13" text-anchor="end" fill="#333">route_lookup_200</text>
-<rect x="300" y="270" width="1.9" height="20" fill="#2563eb"/>
-<text x="309.9" y="285" font-size="13" fill="#111">7.7 ns</text>
+<rect x="300" y="270" width="2.1" height="20" fill="#2563eb"/>
+<text x="310.1" y="285" font-size="13" fill="#111">10.6 ns</text>
 </svg>

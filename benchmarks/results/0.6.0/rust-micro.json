@@ -1,0 +1,42 @@
+{
+  "build_response_batch_10": {
+    "mean_ns": 2709.571790250148,
+    "median_ns": 2823.0973430792437,
+    "stddev_ns": 241.39602283944376
+  },
+  "build_response_single": {
+    "mean_ns": 268.4771767916376,
+    "median_ns": 270.7657949181687,
+    "stddev_ns": 8.304116817669064
+  },
+  "error_envelope": {
+    "mean_ns": 398.16250761420997,
+    "median_ns": 400.265215861205,
+    "stddev_ns": 13.852260085860326
+  },
+  "parse_batch_10_get": {
+    "mean_ns": 2293.145407416192,
+    "median_ns": 2212.1435268361583,
+    "stddev_ns": 292.13443802308257
+  },
+  "parse_batch_10_post": {
+    "mean_ns": 2055.864951278544,
+    "median_ns": 2059.699215753299,
+    "stddev_ns": 34.280617043617426
+  },
+  "parse_single_get": {
+    "mean_ns": 233.0474182354606,
+    "median_ns": 231.8404107010482,
+    "stddev_ns": 3.7088767506246447
+  },
+  "parse_single_post": {
+    "mean_ns": 367.6517465498024,
+    "median_ns": 322.27667908677114,
+    "stddev_ns": 104.64306044482588
+  },
+  "route_lookup_200": {
+    "mean_ns": 10.620791612783135,
+    "median_ns": 10.90712137632428,
+    "stddev_ns": 1.7679727005264079
+  }
+}
