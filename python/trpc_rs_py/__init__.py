@@ -44,6 +44,7 @@ from importlib.metadata import version as _package_version
 from ._core import Limits
 from .asgi import ASGIApp, attach, mount
 from .codegen import generate_types
+from .context import ContextFactory, RequestContext
 from .errors import TRPCError, TRPCErrorCode, data_code_for
 from .openapi import generate_openapi, merge_openapi
 from .rest import mount_rest
@@ -60,9 +61,11 @@ except PackageNotFoundError:  # running from a source checkout without install m
 
 __all__ = [
     "ASGIApp",
+    "ContextFactory",
     "Limits",
     "Procedure",
     "ProcedureKind",
+    "RequestContext",
     "RestRoute",
     "Router",
     "TRPCError",

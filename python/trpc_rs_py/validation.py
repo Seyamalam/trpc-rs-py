@@ -132,6 +132,10 @@ def build_input_validator(handler: Callable[..., Any]) -> InputValidator | None:
         return None
 
     parameters = list(signature.parameters.values())
+    # A leading `ctx` parameter is injected with the request context at call
+    # time (see trpc_rs_py.context); it is never client input.
+    if parameters and parameters[0].name == "ctx":
+        parameters = parameters[1:]
     if not parameters:
         return None
 

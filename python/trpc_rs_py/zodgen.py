@@ -402,7 +402,7 @@ def _input_schema(
         msg = f"procedure {path!r}: cannot inspect the handler's signature"
         raise TypeError(msg)
     ordinary: list[inspect.Parameter] = []
-    for parameter in signature.parameters.values():
+    for index, parameter in enumerate(signature.parameters.values()):
         if parameter.kind is inspect.Parameter.VAR_KEYWORD:
             msg = f"procedure {path!r}: **kwargs cannot be expressed as a zod schema"
             raise TypeError(msg)
@@ -410,6 +410,9 @@ def _input_schema(
             if not ordinary:
                 msg = f"procedure {path!r}: *args-only handlers cannot be expressed"
                 raise TypeError(msg)
+            continue
+        if index == 0 and parameter.name == "ctx":
+            # Injected request context, not client input (trpc_rs_py.context).
             continue
         if kind is ProcedureKind.SUBSCRIPTION and parameter.name == "lastEventId":
             continue

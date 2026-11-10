@@ -1172,11 +1172,15 @@ def _input_members(
     has_var_keyword = False
     has_var_positional = False
     ordinary: list[inspect.Parameter] = []
-    for parameter in signature.parameters.values():
+    for index, parameter in enumerate(signature.parameters.values()):
         if parameter.kind is inspect.Parameter.VAR_KEYWORD:
             has_var_keyword = True
         elif parameter.kind is inspect.Parameter.VAR_POSITIONAL:
             has_var_positional = True
+        elif index == 0 and parameter.name == "ctx":
+            # A leading `ctx` is the injected request context, not input
+            # (mirrors the runtime contract in trpc_rs_py.context).
+            continue
         elif kind is ProcedureKind.SUBSCRIPTION and parameter.name == "lastEventId":
             continue
         else:

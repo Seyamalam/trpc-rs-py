@@ -120,6 +120,10 @@ def _scope_from_environ(environ: dict[str, Any]) -> dict[str, Any]:
             environ.get("SERVER_NAME", ""),
             int(environ.get("SERVER_PORT") or 0),
         ),
+        # Framework-native request for RequestContext.request (see
+        # trpc_rs_py.context): under WSGI the environ is the object users
+        # expect, not the translated scope.
+        "trpc.request": environ,
     }
 
 
@@ -131,6 +135,7 @@ def mount_wsgi(
     limits: Any = None,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
+    context_factory: Any = None,
 ) -> Callable[[dict[str, Any], Callable[..., Any]], Iterable[bytes]]:
     """Return a WSGI app serving `router` as tRPC v11 endpoints.
 
@@ -153,6 +158,10 @@ def mount_wsgi(
             connections are noticed on the next write.
         max_sse_event_size: Largest single encoded SSE frame in bytes;
             defaults to the adapter default.
+        context_factory: Optional factory called once per request with the
+            `RequestContext`; the returned object is injected into handlers
+            whose first parameter is named `ctx`. Defaults to the
+            `RequestContext` itself.
 
     Returns:
         A WSGI application `app(environ, start_response) -> iterable`.
@@ -181,6 +190,7 @@ def mount_wsgi(
         max_sse_event_size=(
             DEFAULT_MAX_SSE_EVENT_SIZE if max_sse_event_size is None else max_sse_event_size
         ),
+        context_factory=context_factory,
     )
     return wsgi_from_asgi(asgi_app)
 
@@ -199,6 +209,7 @@ def attach_flask(
     limits: Any = None,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
+    context_factory: Any = None,
 ) -> Any:
     """Mount `router` under `path` on a Flask (or Werkzeug) application.
 
@@ -214,6 +225,7 @@ def attach_flask(
         limits: Forwarded to `mount_wsgi`.
         sse_ping_interval: Forwarded to `mount_wsgi`.
         max_sse_event_size: Forwarded to `mount_wsgi`.
+        context_factory: Forwarded to `mount_wsgi`.
 
     Returns:
         The same `app`, with its `wsgi_app` wrapped by the dispatcher.
@@ -248,6 +260,7 @@ def attach_flask(
         limits=limits,
         sse_ping_interval=sse_ping_interval,
         max_sse_event_size=max_sse_event_size,
+        context_factory=context_factory,
     )
     mounts = {path: trpc_app}
     app.wsgi_app = DispatcherMiddleware(app.wsgi_app, mounts)

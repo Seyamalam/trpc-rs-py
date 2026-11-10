@@ -15,6 +15,7 @@ nav:
   - Architecture: architecture.md
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md
+  - Context: context.md
   - Typed errors: typed-errors.md
   - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md

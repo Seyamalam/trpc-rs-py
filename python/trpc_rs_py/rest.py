@@ -46,6 +46,12 @@ from urllib.parse import parse_qs, unquote
 
 from ._core import CallResult, Limits, build_response
 from .asgi import ASGIApp, Receive, Scope, Send
+from .context import (
+    ContextFactory,
+    ctx_injection,
+    inject_ctx,
+    request_context_from_scope,
+)
 from .errors import TRPCError, TRPCErrorCode, error_data_payload, http_status_for
 from .openapi import generate_openapi
 from .router import Procedure, ProcedureKind, RestRoute, Router
@@ -135,6 +141,7 @@ def mount_rest(
     docs: bool | None = None,
     production: bool = False,
     limits: Limits | None = None,
+    context_factory: ContextFactory | None = None,
 ) -> ASGIApp:
     """Serve `RestRoute` procedures as REST endpoints plus OpenAPI + docs.
 
@@ -157,6 +164,10 @@ def mount_rest(
         production: Production mode — redacts internal error details and
             (with `docs=None`) disables the docs UI.
         limits: Request limits; protocol defaults when `None`.
+        context_factory: Optional factory called once per request with the
+            `RequestContext`; the returned object is injected into handlers
+            whose first parameter is named `ctx`. Defaults to the
+            `RequestContext` itself.
 
     Returns:
         An ASGI application to mount under any prefix.
@@ -220,7 +231,9 @@ def mount_rest(
             matched_path = True
             if route.rest.method != method:
                 continue
-            await _serve_route(route, match, scope, receive, send, resolved_limits, production)
+            await _serve_route(
+                route, match, scope, receive, send, resolved_limits, production, context_factory
+            )
             return
         if matched_path:
             await _send_error(send, 405, "METHOD_NOT_SUPPORTED", "Method not allowed")
@@ -240,6 +253,7 @@ def serve_attached(
     docs: bool | None = None,
     production: bool = False,
     limits: Limits | None = None,
+    context_factory: ContextFactory | None = None,
 ) -> ASGIApp:
     """Internal variant of `mount_rest` for `attach(..., rest_path=...)`.
 
@@ -256,6 +270,8 @@ def serve_attached(
         docs: Docs UI toggle; see `mount_rest`.
         production: Production error redaction; see `mount_rest`.
         limits: Request limits; protocol defaults when `None`.
+        context_factory: Optional per-request context factory; see
+            `mount_rest`.
 
     Returns:
         An ASGI application dispatching under `prefix`.
@@ -268,6 +284,7 @@ def serve_attached(
         docs=docs,
         production=production,
         limits=limits,
+        context_factory=context_factory,
     )
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
@@ -335,13 +352,23 @@ async def _serve_route(
     send: Send,
     limits: Limits,
     production: bool,
+    context_factory: ContextFactory | None = None,
 ) -> None:
     """Run one matched REST call and send its JSON response."""
+    request_context = request_context_from_scope(scope)
+    try:
+        ctx = context_factory(request_context) if context_factory is not None else request_context
+        if inspect.isawaitable(ctx):
+            ctx = await ctx
+    except Exception as error:
+        message = "Internal server error" if production else repr(error)
+        await _send_error(send, 500, "INTERNAL_SERVER_ERROR", message)
+        return
     input_value = await _collect_input(route, match, scope, receive, limits)
     if isinstance(input_value, _InputError):
         await _send_error(send, 400, "BAD_REQUEST", "Invalid request body")
         return
-    status, body = await _run(route, input_value, production)
+    status, body = await _run(route, input_value, production, ctx)
     await _send_text(send, status, json.dumps(body), "application/json")
 
 
@@ -395,7 +422,9 @@ async def _read_body(receive: Receive, limit: int) -> bytes:
             return b"".join(parts)
 
 
-async def _run(route: _Route, input_value: Any, production: bool) -> tuple[int, Any]:
+async def _run(
+    route: _Route, input_value: Any, production: bool, ctx: Any = None
+) -> tuple[int, Any]:
     """Execute the procedure and produce `(status, json_body)`.
 
     Mirrors `_run_call` in `asgi.py` — same validator pipeline and the same
@@ -408,6 +437,7 @@ async def _run(route: _Route, input_value: Any, production: bool) -> tuple[int, 
             args, kwargs = route.input_validator(input_value)
         else:
             args, kwargs = (), {}
+        args, kwargs = inject_ctx(ctx_injection(procedure.handler), args, kwargs, ctx)
     except Exception:
         return 400, _error_object("BAD_REQUEST", f"Invalid input for procedure {procedure.path}")
     try:

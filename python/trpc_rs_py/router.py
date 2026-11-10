@@ -448,7 +448,10 @@ def _input_annotation_of(hints: dict[str, Any], signature: inspect.Signature | N
     """
     if signature is None:
         return None
-    for parameter in signature.parameters.values():
+    for index, parameter in enumerate(signature.parameters.values()):
+        if index == 0 and parameter.name == "ctx":
+            # Injected request context, not client input (trpc_rs_py.context).
+            continue
         if parameter.kind in (
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,

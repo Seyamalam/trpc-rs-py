@@ -195,11 +195,14 @@ def _operation(procedure: Procedure, components: dict[str, Any]) -> dict[str, An
     parameters: list[dict[str, Any]] = []
     body_fields: dict[str, tuple[Any, Any]] = {}
     if signature is not None:
-        for parameter in signature.parameters.values():
+        for index, parameter in enumerate(signature.parameters.values()):
             if parameter.kind in (
                 inspect.Parameter.VAR_KEYWORD,
                 inspect.Parameter.VAR_POSITIONAL,
             ):
+                continue
+            if index == 0 and parameter.name == "ctx":
+                # Injected request context, not a client-supplied parameter.
                 continue
             annotation = hints.get(parameter.name, parameter.annotation)
             required = parameter.default is inspect.Parameter.empty

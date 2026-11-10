@@ -83,6 +83,9 @@ def _scope_from_request(request: Any, trpc_path: str) -> dict[str, Any]:
         "headers": headers,
         "client": (request.META.get("REMOTE_ADDR", ""), 0),
         "server": ("django", 0),
+        # Framework-native request for RequestContext.request (see
+        # trpc_rs_py.context): handlers get the HttpRequest itself.
+        "trpc.request": request,
     }
 
 
@@ -132,6 +135,7 @@ def trpc_view(
     limits: Any = None,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
+    context_factory: Any = None,
 ) -> Callable[..., Any]:
     """Return a Django *sync* view serving `router` as tRPC v11 endpoints.
 
@@ -145,6 +149,8 @@ def trpc_view(
         limits: Forwarded to `mount()`.
         sse_ping_interval: Forwarded to `mount()` — recommended under WSGI.
         max_sse_event_size: Forwarded to `mount()`.
+        context_factory: Forwarded to `mount()`; `RequestContext.request` is
+            the `django.http.HttpRequest`.
 
     Returns:
         A Django view callable `(request, trpc_path="") -> HttpResponse`.
@@ -166,6 +172,7 @@ def trpc_view(
                 "limits": limits,
                 "sse_ping_interval": sse_ping_interval,
                 "max_sse_event_size": max_sse_event_size,
+                "context_factory": context_factory,
             },
         )
     )
@@ -263,6 +270,7 @@ def trpc_view_async(
     limits: Any = None,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
+    context_factory: Any = None,
 ) -> Callable[..., Any]:
     """Return a Django *async* view serving `router` as tRPC v11 endpoints.
 
@@ -278,6 +286,8 @@ def trpc_view_async(
         limits: Forwarded to `mount()`.
         sse_ping_interval: Forwarded to `mount()`.
         max_sse_event_size: Forwarded to `mount()`.
+        context_factory: Forwarded to `mount()`; `RequestContext.request` is
+            the `django.http.HttpRequest`.
 
     Returns:
         An async Django view callable `(request, trpc_path="")`.
@@ -290,6 +300,7 @@ def trpc_view_async(
                 "limits": limits,
                 "sse_ping_interval": sse_ping_interval,
                 "max_sse_event_size": max_sse_event_size,
+                "context_factory": context_factory,
             },
         )
     )
@@ -310,6 +321,7 @@ def urlpatterns(
     limits: Any = None,
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
+    context_factory: Any = None,
 ) -> list[Any]:
     """Return `path()` entries serving `router` — the URL include helper.
 
@@ -325,6 +337,7 @@ def urlpatterns(
         limits: Forwarded to the view.
         sse_ping_interval: Forwarded to the view.
         max_sse_event_size: Forwarded to the view.
+        context_factory: Forwarded to the view.
 
     Returns:
         A list of `django.urls.path()` objects; spread into `urlpatterns`.
@@ -348,6 +361,7 @@ def urlpatterns(
         "limits": limits,
         "sse_ping_interval": sse_ping_interval,
         "max_sse_event_size": max_sse_event_size,
+        "context_factory": context_factory,
     }
     view = trpc_view_async(router, **kwargs) if asynchronous else trpc_view(router, **kwargs)
     return [django_path(f"{prefix}/<path:trpc_path>", view)]

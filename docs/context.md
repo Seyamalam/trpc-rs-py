@@ -1,0 +1,79 @@
+# Context
+
+Every adapter entry point accepts a `context_factory`. It runs **once per
+HTTP request** — not per batched call — and its return value is injected
+into any handler whose first parameter is named `ctx`:
+
+```python
+from trpc_rs_py import RequestContext, Router, mount
+
+router = Router()
+
+
+@router.query
+def me(ctx) -> dict:
+    return {"name": ctx.user, "ip": ctx.client}
+
+
+def context_factory(request: RequestContext) -> RequestContext:
+    request.user = request.headers.get("x-user", "anonymous")
+    return request
+
+
+app = mount(router, context_factory=context_factory)
+```
+
+`ctx` is a **reserved leading parameter**, exactly like `lastEventId` on
+subscriptions: it is stripped from input validation, so clients never send
+it, and it is omitted from `codegen ts`, `codegen zod`, REST parameter
+mapping, and the OpenAPI document. A handler `def me(ctx)` takes *no*
+input; `def greet(ctx, name: str)` takes `{ name: string }`.
+
+Async factories are awaited:
+
+```python
+async def context_factory(request: RequestContext) -> dict:
+    return {"user": await session.user(request.headers.get("authorization"))}
+```
+
+Without a `context_factory`, `ctx` is the `RequestContext` itself.
+
+## `RequestContext`
+
+The factory receives a uniform `RequestContext` dataclass:
+
+| Field | Contents |
+| --- | --- |
+| `method` | HTTP method (`"GET"`, `"POST"`, ...) |
+| `path` | Request path as routed (`"/trpc/greet"`) |
+| `query_string` | Raw query string, no leading `?` |
+| `headers` | Lower-cased headers; first occurrence wins on repeats |
+| `raw_headers` | `(name, value)` pairs in wire order |
+| `client` | `(host, port)` of the peer when known |
+| `request` | Framework-native request object (below) |
+| `user` | Free slot for application data (`None` default) |
+
+`request` is the object users of each framework already have:
+
+| Adapter | `request` |
+| --- | --- |
+| `mount()` / `attach()` / `mount_rest()` | the ASGI `scope` dict |
+| `mount_wsgi()` / `attach_flask()` | the WSGI `environ` dict |
+| `trpc_view()` / `trpc_view_async()` | the `django.http.HttpRequest` |
+
+## Injection rules
+
+- Only the **first declared parameter** named `ctx` opts in — positional or
+  keyword-only (`def f(*, ctx)`). A `ctx` anywhere else is ordinary input.
+- Handlers without a leading `ctx` are untouched; mixing both styles in one
+  router is fine.
+- `ctx` works on queries, mutations, subscriptions (alongside
+  `lastEventId`), and REST routes — all five adapters, one factory call per
+  request shared by every call in a batch.
+
+## Errors
+
+A factory that raises produces `INTERNAL_SERVER_ERROR` — an internal
+failure, never a protocol error. Under `production=True` the message is
+`"Internal server error"`; in development it carries `repr(error)`, same
+as every other internal failure.
