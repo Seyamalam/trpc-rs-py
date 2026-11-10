@@ -17,7 +17,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
-from trpc_rs_py._bridge import make_receive, serve_asgi_sync
+from trpc_rs_py._bridge import make_receive, serve_asgi_sync, strip_hop_by_hop
 
 if TYPE_CHECKING:
     from trpc_rs_py.router import Router
@@ -61,9 +61,13 @@ def _scope_from_request(request: Any, trpc_path: str) -> dict[str, Any]:
     `request.headers` so the dispatch layer still sees `content-type`,
     `content-length`, and `last-event-id`.
     """
+    # An empty `Content-Length` (set by some WSGI servers, e.g. wsgiref, on
+    # requests without bodies) is meaningless and rejected by the protocol
+    # layer — strip it like the WSGI adapter strips empty CONTENT_LENGTH.
     headers = [
         (name.lower().encode("latin-1"), value.encode("latin-1"))
         for name, value in request.headers.items()
+        if not (name.lower() == "content-length" and not value.strip())
     ]
     path = f"/{trpc_path}" if trpc_path else "/"
     return {
@@ -243,7 +247,7 @@ def asgi_view_async(asgi_app: Callable[..., Any]) -> Callable[..., Any]:
                 if not task.done():
                     task.cancel()
 
-        headers = _text_headers(first.get("headers", []))
+        headers = _text_headers(strip_hop_by_hop(first.get("headers", [])))
         if headers.get("content-type", "").startswith("text/event-stream"):
             return StreamingHttpResponse(body_iter(), status=status, headers=headers)
         chunks: list[bytes] = [chunk async for chunk in body_iter()]

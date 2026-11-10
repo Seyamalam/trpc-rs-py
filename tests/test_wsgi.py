@@ -232,6 +232,29 @@ def test_response_headers_preserved(client: Client) -> None:
     assert "Content-Type" in names or "content-type" in {n.lower() for n in names}
 
 
+def test_sse_response_strips_hop_by_hop_headers(client: Client) -> None:
+    """Stdlib wsgiref asserts on `connection`/`keep-alive`; the bridge strips them."""
+    r = client.get("/trpc/ticks")
+    assert r.headers["Content-Type"].startswith("text/event-stream")
+    names = {k.lower() for k, _v in r.headers}
+    assert "connection" not in names
+    assert "keep-alive" not in names
+
+
+def test_strip_hop_by_hop_drops_connection_named_headers() -> None:
+    from trpc_rs_py._bridge import strip_hop_by_hop
+
+    headers = [
+        (b"content-type", b"text/event-stream"),
+        (b"connection", b"keep-alive, x-extra"),
+        (b"keep-alive", b"timeout=5"),
+        (b"x-extra", b"1"),
+        (b"x-keep", b"1"),
+    ]
+    names = {n for n, _ in strip_hop_by_hop(headers)}
+    assert names == {b"content-type", b"x-keep"}
+
+
 def test_body_iterable_is_closeable(client: Client) -> None:
     """The returned iterable supports close() for WSGI cleanup semantics."""
     app = mount_wsgi(make_router())

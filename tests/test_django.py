@@ -233,6 +233,24 @@ def test_asgi_view_async_serves_rest_get() -> None:
     asyncio.run(run())
 
 
+def test_scope_from_request_strips_empty_content_length() -> None:
+    """Stdlib wsgiref sends `Content-Length: ` on GET; the scope must not carry it."""
+    from typing import ClassVar
+
+    from trpc_rs_py.django import _scope_from_request
+
+    class FakeRequest:
+        method = "GET"
+        scheme = "http"
+        headers: ClassVar = {"content-length": "", "accept": "application/json"}
+        META: ClassVar = {"QUERY_STRING": "a=1", "REMOTE_ADDR": "127.0.0.1"}
+
+    scope = _scope_from_request(FakeRequest(), "echo")
+    names = [name for name, _ in scope["headers"]]
+    assert b"content-length" not in names
+    assert b"accept" in names
+
+
 # --- helper surface -----------------------------------------------------------
 
 

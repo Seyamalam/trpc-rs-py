@@ -20,7 +20,45 @@ from dataclasses import dataclass
 from queue import Full, Queue
 from typing import Any
 
-__all__ = ["WsgiResponse", "serve_asgi_sync"]
+__all__ = ["WsgiResponse", "serve_asgi_sync", "strip_hop_by_hop"]
+
+_HOP_BY_HOP = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+
+
+def strip_hop_by_hop(headers: Iterable[tuple[bytes, bytes]]) -> list[tuple[bytes, bytes]]:
+    """Drop RFC 7230 hop-by-hop headers a WSGI bridge must not forward.
+
+    ASGI apps may legitimately emit `connection: keep-alive` (SSE responses
+    do); WSGI forbids applications from sending hop-by-hop headers and
+    wsgiref asserts on them. `connection` also names the headers it applies
+    to — those are stripped too.
+
+    Args:
+        headers: ASGI `(name, value)` byte pairs.
+
+    Returns:
+        The header list without hop-by-hop entries.
+    """
+    items = list(headers)
+    extra = {
+        token.strip().lower()
+        for name, value in items
+        if name.lower() == b"connection"
+        for token in value.decode("latin-1").split(",")
+    }
+    drop = _HOP_BY_HOP | extra
+    return [(n, v) for n, v in items if n.decode("latin-1").lower() not in drop]
 
 
 @dataclass(frozen=True)
@@ -198,6 +236,6 @@ def serve_asgi_sync(
         raise RuntimeError(msg)
     return WsgiResponse(
         status=int(first["status"]),
-        headers=list(first.get("headers", [])),
+        headers=strip_hop_by_hop(first.get("headers", [])),
         body=bodies(),
     )
