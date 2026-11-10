@@ -5,6 +5,61 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-10
+
+### Added
+
+- Request context (ADR 0011): `context_factory=` on every adapter entry
+  point builds one handler-visible `ctx` per request; a leading `ctx`
+  parameter on the handler opts into injection and is excluded from
+  input validation, TypeScript/Zod codegen, and OpenAPI.
+  `RequestContext` carries method, path, headers, client, and the
+  framework-native request object.
+- tRPC-style middleware (ADR 0011): `Call`/`Next`/`run_middleware` onion
+  chain in `trpc_rs_py.middleware`. Router-level `Router(middleware=[...])`
+  and `router.use()` (snapshotted at registration, travels through
+  merge/nest); mount-level `middleware=` on all eight entry points runs
+  outermost-first. Input validation → chain → output validation;
+  subscriptions run the chain once at start; REST shares it. `next(ctx=)`
+  replaces the downstream context.
+- Built-in middleware helpers: `logging_middleware`, `timing_middleware`,
+  `rate_limit` (per-key token bucket → `TOO_MANY_REQUESTS`, thread-safe,
+  lazy idle eviction), `require_auth` (sync/async ctx predicate →
+  `UNAUTHORIZED`), and `tracing_middleware` (optional `opentelemetry-api`;
+  one `trpc.<path>` span per call, hard-fails when the dep is missing).
+- `trpc_rs_py.cors.cors()` — deny-by-default ASGI wrapper: preflight
+  204/403, exact-origin allowlist, `*`-with-credentials reflects the
+  concrete origin, merged `Vary`, response bodies never buffered (SSE
+  safe). Works on every adapter through `wsgi_from_asgi`/`asgi_view`.
+- `trpc_rs_py.csrf.csrf_protect()` — adapter-level filter on
+  credential-carrying requests (Cookie/Authorization): Fetch Metadata
+  safe values pass, `cross-site` requires an exact `Origin` match,
+  missing metadata falls back to the allowlist. Fixed 403 envelope.
+- `/trpc/panel` playground: `panel=` on `mount`/`attach` (forwarded to
+  WSGI and Django helpers) serves a vendored zero-dependency UI —
+  procedure list, schema-driven input forms, call buttons, live
+  EventSource subscription pane — plus `GET {path}/panel/schema`
+  introspection JSON. Enabled by default in development, off in
+  production unless explicit.
+- `trpc_rs_py.testing` — dependency-free in-process clients:
+  `test_client(router)` drives the real `mount()` app without sockets
+  (`query`/`mutation`/`batch`/`subscribe`, `TrpcTestClientError`), plus
+  `flask_test_client` and `django_test_client` wrappers returning each
+  framework's own test client.
+- Vercel AI SDK helpers (ADR 0012): `ai_sdk_endpoint` serves the AI SDK
+  v5 UI message stream contract so `useChat`'s `DefaultChatTransport`
+  works with zero custom frontend code; `ai_text_stream`,
+  `ai_message_stream`, and `ai_data_part` emit UI-message-stream chunks
+  yieldable from tRPC subscriptions too. Disconnect cancels the source
+  iterable; backpressure stays pull-based.
+- CLI: `check --json` (`{"ok", "procedures"}` / `{"ok": false, "error"}`)
+  and enriched `routes --json` with per-procedure `input`, `output`,
+  and `errors` entries.
+- Docs: `context.md`, `middleware.md`, `cors.md`, `csrf.md`,
+  `testing.md`, `playground.md`, `ai-sdk.md`, and ADRs 0011/0012.
+- 194 new tests (401 → 595) covering context, middleware semantics,
+  security wrappers, the panel, the test clients, and the AI stream.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added
