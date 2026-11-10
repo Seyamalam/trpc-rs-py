@@ -40,7 +40,7 @@ interface AdapterContext {
 }
 
 async function makeContext(
-  framework: "fastapi" | "starlette",
+  framework: "fastapi" | "starlette" | "flask" | "django_sync" | "django_async",
 ): Promise<AdapterContext> {
   const server = await startFixtureServer(framework);
   const log = new RequestLog();
@@ -89,7 +89,13 @@ function assertTrpcError(
   }
 }
 
-for (const framework of ["fastapi", "starlette"] as const) {
+for (const framework of [
+  "fastapi",
+  "starlette",
+  "flask",
+  "django_sync",
+  "django_async",
+] as const) {
   describe(`official @trpc/client v11 runtime compat: ${framework}`, () => {
     let ctx: AdapterContext;
 

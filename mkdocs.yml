@@ -39,3 +39,4 @@ nav:
       - 0007 SSE subscription architecture: decisions/0007-sse-subscription-architecture.md
       - 0008 Node migration link: decisions/0008-node-migration-link.md
       - 0009 Typed errors: decisions/0009-typed-errors.md
+      - 0010 WSGI/Django adapter bridge: decisions/0010-wsgi-django-adapter-bridge.md

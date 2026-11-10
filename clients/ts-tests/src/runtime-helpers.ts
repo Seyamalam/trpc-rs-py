@@ -83,7 +83,7 @@ export interface FixtureServer {
  * the server to accept HTTP requests, and return its base URL.
  */
 export async function startFixtureServer(
-  framework: "fastapi" | "starlette",
+  framework: "fastapi" | "starlette" | "flask" | "django_sync" | "django_async",
 ): Promise<FixtureServer> {
   const port = await pickFreePort();
   const script = path.join(TS_TESTS_DIR, "fixtures", `${framework}_app.py`);

@@ -50,6 +50,7 @@ from .rest import mount_rest
 from .router import Procedure, ProcedureKind, RestRoute, Router
 from .streaming import Tracked, tracked
 from .validation import build_input_validator, build_output_validator
+from .wsgi import attach_flask, mount_wsgi, wsgi_from_asgi
 from .zodgen import generate_zod
 
 try:
@@ -69,6 +70,7 @@ __all__ = [
     "Tracked",
     "__version__",
     "attach",
+    "attach_flask",
     "build_input_validator",
     "build_output_validator",
     "data_code_for",
@@ -78,5 +80,7 @@ __all__ = [
     "merge_openapi",
     "mount",
     "mount_rest",
+    "mount_wsgi",
     "tracked",
+    "wsgi_from_asgi",
 ]

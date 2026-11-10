@@ -116,7 +116,7 @@ _SSE_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"connection", b"keep-alive"),
 )
 
-_DEFAULT_MAX_SSE_EVENT_SIZE = 1024 * 1024
+DEFAULT_MAX_SSE_EVENT_SIZE = 1024 * 1024
 
 
 class _BodyTooLarge(Exception):
@@ -1182,7 +1182,7 @@ def mount(
     limits: Limits | None = None,
     production: bool = False,
     sse_ping_interval: float | None = None,
-    max_sse_event_size: int = _DEFAULT_MAX_SSE_EVENT_SIZE,
+    max_sse_event_size: int = DEFAULT_MAX_SSE_EVENT_SIZE,
 ) -> ASGIApp:
     """Return a standalone ASGI app serving `router` as tRPC v11 endpoints.
 
@@ -1294,7 +1294,7 @@ def attach(
     limits: Limits | None = None,
     production: bool = False,
     sse_ping_interval: float | None = None,
-    max_sse_event_size: int = _DEFAULT_MAX_SSE_EVENT_SIZE,
+    max_sse_event_size: int = DEFAULT_MAX_SSE_EVENT_SIZE,
     rest_path: str | None = None,
 ) -> ASGIApp:
     """Wrap an existing ASGI app so `router` serves the tRPC prefix.
