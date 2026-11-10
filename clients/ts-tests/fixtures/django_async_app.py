@@ -7,7 +7,6 @@ and `/api` REST through the sync bridge offloaded to a thread.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 
@@ -24,36 +23,18 @@ settings.configure(
 )
 django.setup()
 
-from typing import Any
-
-from django.http import HttpResponse
 from django.urls import path
 from router import build_fixture_router
 
 from trpc_rs_py import mount_rest
-from trpc_rs_py._bridge import serve_asgi_sync
-from trpc_rs_py.django import _scope_from_request, trpc_view_async
+from trpc_rs_py.django import asgi_view_async, trpc_view_async
 
 ROUTER = build_fixture_router()
 REST_APP = mount_rest(ROUTER, title="Fixture API", version="0.1.0")
 
-
-async def rest_view(request: Any, rest_path: str = "") -> Any:
-    """Serve the REST mount under /api; bridge runs on a worker thread."""
-    try:
-        body = request.body
-    except Exception:
-        body = b""
-    resp = await asyncio.to_thread(
-        serve_asgi_sync, REST_APP, _scope_from_request(request, rest_path), body
-    )
-    headers = {n.decode("latin-1"): v.decode("latin-1") for n, v in resp.headers}
-    return HttpResponse(b"".join(resp.body), status=resp.status, headers=headers)
-
-
 urlpatterns = [
     path("trpc/<path:trpc_path>", trpc_view_async(ROUTER)),
-    path("api/<path:rest_path>", rest_view),
+    path("api/<path:path>", asgi_view_async(REST_APP)),
 ]
 
 

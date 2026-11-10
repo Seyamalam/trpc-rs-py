@@ -23,36 +23,18 @@ settings.configure(
 )
 django.setup()
 
-from typing import Any
-
-from django.http import HttpResponse, StreamingHttpResponse
 from django.urls import path
 from router import build_fixture_router
 
 from trpc_rs_py import mount_rest
-from trpc_rs_py._bridge import serve_asgi_sync
-from trpc_rs_py.django import _scope_from_request, trpc_view
+from trpc_rs_py.django import asgi_view, trpc_view
 
 ROUTER = build_fixture_router()
 REST_APP = mount_rest(ROUTER, title="Fixture API", version="0.1.0")
 
-
-def rest_view(request: Any, rest_path: str = "") -> Any:
-    """Serve the REST mount under /api through the sync bridge."""
-    try:
-        body = request.body
-    except Exception:
-        body = b""
-    resp = serve_asgi_sync(REST_APP, _scope_from_request(request, rest_path), body)
-    headers = {n.decode("latin-1"): v.decode("latin-1") for n, v in resp.headers}
-    if headers.get("content-type", "").startswith("text/event-stream"):
-        return StreamingHttpResponse(resp.body, status=resp.status, headers=headers)
-    return HttpResponse(b"".join(resp.body), status=resp.status, headers=headers)
-
-
 urlpatterns = [
     path("trpc/<path:trpc_path>", trpc_view(ROUTER)),
-    path("api/<path:rest_path>", rest_view),
+    path("api/<path:path>", asgi_view(REST_APP)),
 ]
 
 

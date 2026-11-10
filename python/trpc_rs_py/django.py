@@ -22,7 +22,7 @@ from trpc_rs_py._bridge import make_receive, serve_asgi_sync
 if TYPE_CHECKING:
     from trpc_rs_py.router import Router
 
-__all__ = ["trpc_view", "trpc_view_async", "urlpatterns"]
+__all__ = ["asgi_view", "asgi_view_async", "trpc_view", "trpc_view_async", "urlpatterns"]
 
 
 def _mount_app(router: Router, kwargs: dict[str, Any]) -> Callable[..., Any]:
@@ -32,6 +32,25 @@ def _mount_app(router: Router, kwargs: dict[str, Any]) -> Callable[..., Any]:
     if kwargs.get("max_sse_event_size") is None:
         kwargs["max_sse_event_size"] = DEFAULT_MAX_SSE_EVENT_SIZE
     return mount(router, path="", **kwargs)
+
+
+def _request_body(request: Any) -> bytes:
+    """Read the request body; `request.body` raises on some Django setups."""
+    try:
+        body: bytes = request.body
+        return body
+    except Exception:
+        return b""
+
+
+def _to_django_response(response: Any) -> Any:
+    """Turn a `WsgiResponse` into a Django response, streaming for SSE."""
+    from django.http import HttpResponse, StreamingHttpResponse
+
+    headers = _text_headers(response.headers)
+    if headers.get("content-type", "").startswith("text/event-stream"):
+        return StreamingHttpResponse(response.body, status=response.status, headers=headers)
+    return HttpResponse(b"".join(response.body), status=response.status, headers=headers)
 
 
 def _scope_from_request(request: Any, trpc_path: str) -> dict[str, Any]:
@@ -68,6 +87,40 @@ def _text_headers(headers: Iterable[tuple[bytes, bytes]]) -> dict[str, str]:
     return {name.decode("latin-1"): value.decode("latin-1") for name, value in headers}
 
 
+def asgi_view(asgi_app: Callable[..., Any]) -> Callable[..., Any]:
+    """Return a Django *sync* view serving an arbitrary ASGI `http` app.
+
+    The generic form of `trpc_view` — use it to mount `mount_rest(router)`
+    (or any other ASGI app) inside a Django URLconf. The URL pattern must
+    capture the remaining path under the converter name `path`.
+
+    Args:
+        asgi_app: The ASGI application to serve.
+
+    Returns:
+        A Django view callable `(request, path="") -> HttpResponse`;
+        `StreamingHttpResponse` when the app answers with SSE.
+
+    Example:
+        ```python
+        from django.urls import path
+        from trpc_rs_py import mount_rest
+        from trpc_rs_py.django import asgi_view
+
+        urlpatterns = [path("api/<path:path>", asgi_view(mount_rest(router)))]
+        ```
+    """
+
+    def view(request: Any, path: str = "") -> Any:
+        """Serve one Django request through the ASGI dispatch path."""
+        response = serve_asgi_sync(
+            asgi_app, _scope_from_request(request, path), _request_body(request)
+        )
+        return _to_django_response(response)
+
+    return view
+
+
 def trpc_view(
     router: Router,
     *,
@@ -78,9 +131,8 @@ def trpc_view(
 ) -> Callable[..., Any]:
     """Return a Django *sync* view serving `router` as tRPC v11 endpoints.
 
-    Queries and mutations return a `StreamingHttpResponse` (functionally a
-    `HttpResponse` for single-chunk bodies); SSE subscriptions stream through
-    the same response — one worker thread per open stream, disconnects
+    Queries and mutations return a `HttpResponse`; SSE subscriptions return a
+    `StreamingHttpResponse` — one worker thread per open stream, disconnects
     noticed on write (the documented WSGI limitations).
 
     Args:
@@ -99,87 +151,63 @@ def trpc_view(
         from trpc_rs_py.django import trpc_view
         from myapp.trpc import router
 
-        urlpatterns = [path("trpc/<path:p>", trpc_view(router))]
+        urlpatterns = [path("trpc/<path:trpc_path>", trpc_view(router))]
         ```
     """
-    from django.http import HttpResponse, StreamingHttpResponse
-
-    asgi_app = _mount_app(
-        router,
-        {
-            "production": production,
-            "limits": limits,
-            "sse_ping_interval": sse_ping_interval,
-            "max_sse_event_size": max_sse_event_size,
-        },
+    generic = asgi_view(
+        _mount_app(
+            router,
+            {
+                "production": production,
+                "limits": limits,
+                "sse_ping_interval": sse_ping_interval,
+                "max_sse_event_size": max_sse_event_size,
+            },
+        )
     )
 
     def view(request: Any, trpc_path: str = "") -> Any:
         """Serve one Django request through the ASGI dispatch path."""
-        try:
-            body = request.body
-        except Exception:
-            body = b""
-        response = serve_asgi_sync(asgi_app, _scope_from_request(request, trpc_path), body)
-        headers = _text_headers(response.headers)
-        if headers.get("content-type", "").startswith("text/event-stream"):
-            return StreamingHttpResponse(response.body, status=response.status, headers=headers)
-        return HttpResponse(b"".join(response.body), status=response.status, headers=headers)
+        return generic(request, trpc_path)
 
     return view
 
 
-def trpc_view_async(
-    router: Router,
-    *,
-    production: bool = False,
-    limits: Any = None,
-    sse_ping_interval: float | None = None,
-    max_sse_event_size: int | None = None,
-) -> Callable[..., Any]:
-    """Return a Django *async* view serving `router` as tRPC v11 endpoints.
+def asgi_view_async(asgi_app: Callable[..., Any]) -> Callable[..., Any]:
+    """Return a Django *async* view serving an arbitrary ASGI `http` app.
 
-    Runs `_serve_trpc` on Django's ASGI event loop directly — SSE streams
-    through an async `StreamingHttpResponse` with real pull-based
-    backpressure and no extra threads. Django also runs this view correctly
-    under WSGI (it wraps async views itself), though the sync view is
-    cheaper there.
+    The generic form of `trpc_view_async` — use it to mount
+    `mount_rest(router)` (or any other ASGI app) inside an async Django
+    URLconf. The URL pattern must capture the remaining path under the
+    converter name `path`. SSE responses stream with real pull-based
+    backpressure on Django's own event loop.
 
     Args:
-        router: The router whose procedures are served.
-        production: Forwarded to `mount()`.
-        limits: Forwarded to `mount()`.
-        sse_ping_interval: Forwarded to `mount()`.
-        max_sse_event_size: Forwarded to `mount()`.
+        asgi_app: The ASGI application to serve.
 
     Returns:
-        An async Django view callable.
+        An async Django view callable `(request, path="")`.
+
+    Example:
+        ```python
+        from django.urls import path
+        from trpc_rs_py import mount_rest
+        from trpc_rs_py.django import asgi_view_async
+
+        urlpatterns = [path("api/<path:path>", asgi_view_async(mount_rest(router)))]
+        ```
     """
     from django.http import HttpResponse, StreamingHttpResponse
 
-    asgi_app = _mount_app(
-        router,
-        {
-            "production": production,
-            "limits": limits,
-            "sse_ping_interval": sse_ping_interval,
-            "max_sse_event_size": max_sse_event_size,
-        },
-    )
-
-    async def view(request: Any, trpc_path: str = "") -> Any:
+    async def view(request: Any, path: str = "") -> Any:
         """Serve one Django request through the ASGI dispatch path."""
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
         async def send(message: dict[str, Any]) -> None:
             await queue.put(message)
 
-        try:
-            body = request.body
-        except Exception:
-            body = b""
         task = asyncio.ensure_future(
-            asgi_app(_scope_from_request(request, trpc_path), make_receive(body), send)
+            asgi_app(_scope_from_request(request, path), make_receive(_request_body(request)), send)
         )
         get = asyncio.ensure_future(queue.get())
         done, _ = await asyncio.wait({get, task}, return_when=asyncio.FIRST_COMPLETED)
@@ -220,6 +248,51 @@ def trpc_view_async(
             return StreamingHttpResponse(body_iter(), status=status, headers=headers)
         chunks: list[bytes] = [chunk async for chunk in body_iter()]
         return HttpResponse(b"".join(chunks), status=status, headers=headers)
+
+    return view
+
+
+def trpc_view_async(
+    router: Router,
+    *,
+    production: bool = False,
+    limits: Any = None,
+    sse_ping_interval: float | None = None,
+    max_sse_event_size: int | None = None,
+) -> Callable[..., Any]:
+    """Return a Django *async* view serving `router` as tRPC v11 endpoints.
+
+    Runs the ASGI app on Django's ASGI event loop directly — SSE streams
+    through an async `StreamingHttpResponse` with real pull-based
+    backpressure and no extra threads. Django also runs this view correctly
+    under WSGI (it wraps async views itself), though the sync view is
+    cheaper there.
+
+    Args:
+        router: The router whose procedures are served.
+        production: Forwarded to `mount()`.
+        limits: Forwarded to `mount()`.
+        sse_ping_interval: Forwarded to `mount()`.
+        max_sse_event_size: Forwarded to `mount()`.
+
+    Returns:
+        An async Django view callable `(request, trpc_path="")`.
+    """
+    generic = asgi_view_async(
+        _mount_app(
+            router,
+            {
+                "production": production,
+                "limits": limits,
+                "sse_ping_interval": sse_ping_interval,
+                "max_sse_event_size": max_sse_event_size,
+            },
+        )
+    )
+
+    async def view(request: Any, trpc_path: str = "") -> Any:
+        """Serve one Django request through the ASGI dispatch path."""
+        return await generic(request, trpc_path)
 
     return view
 

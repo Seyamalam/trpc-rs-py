@@ -22,8 +22,8 @@ if not settings.configured:
 from django.test import AsyncClient, Client
 from django.urls import path as django_path
 
-from trpc_rs_py import Router
-from trpc_rs_py.django import trpc_view
+from trpc_rs_py import RestRoute, Router, mount_rest
+from trpc_rs_py.django import asgi_view, asgi_view_async, trpc_view
 from trpc_rs_py.django import urlpatterns as trpc_urlpatterns
 from trpc_rs_py.errors import TRPCError, TRPCErrorCode
 
@@ -31,7 +31,7 @@ from trpc_rs_py.errors import TRPCError, TRPCErrorCode
 def make_router() -> Router:
     router = Router()
 
-    @router.query
+    @router.query(rest=RestRoute("GET", "/ping"))
     def ping() -> str:
         return "pong"
 
@@ -68,10 +68,13 @@ def make_router() -> Router:
 
 
 ROUTER = make_router()
+REST = mount_rest(ROUTER, title="Test API", version="0.1.0")
 
 urlpatterns = [
     *trpc_urlpatterns(ROUTER),
     *trpc_urlpatterns(ROUTER, prefix="atrpc", asynchronous=True),
+    django_path("api/<path:path>", asgi_view(REST)),
+    django_path("aapi/<path:path>", asgi_view_async(REST)),
 ]
 
 
@@ -202,6 +205,30 @@ def test_async_sse_streams() -> None:
         body = b"".join(chunks).decode()
         assert "event: connected" in body
         assert '"n":0' in body
+
+    asyncio.run(run())
+
+
+# --- generic ASGI views (REST mount) ------------------------------------------
+
+
+def test_asgi_view_serves_rest_get() -> None:
+    r = Client().get("/api/ping")
+    assert r.status_code == 200
+    assert r.json() == "pong"
+
+
+def test_asgi_view_serves_openapi_doc() -> None:
+    r = Client().get("/api/openapi.json")
+    assert r.status_code == 200
+    assert r.json()["info"]["title"] == "Test API"
+
+
+def test_asgi_view_async_serves_rest_get() -> None:
+    async def run() -> None:
+        r = await AsyncClient().get("/aapi/ping")
+        assert r.status_code == 200
+        assert r.json() == "pong"
 
     asyncio.run(run())
 
