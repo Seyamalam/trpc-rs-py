@@ -35,6 +35,7 @@ from collections.abc import (
     Awaitable,
     Callable,
     Coroutine,
+    Iterable,
     Mapping,
     Sequence,
 )
@@ -47,6 +48,8 @@ from .errors import TRPCError, validate_error_class
 
 if TYPE_CHECKING:
     from typing_extensions import TypeVarTuple, Unpack
+
+    from .middleware import Middleware
 
     _Ts = TypeVarTuple("_Ts")
 
@@ -100,6 +103,8 @@ class Procedure:
             errors land in 0.4.0.
         rest: Optional `RestRoute` metadata opting the procedure into REST
             endpoints and the generated OpenAPI document.
+        middleware: The router-level middleware chain snapshotted at
+            registration (`Router.use`); mount-level middleware wraps it.
 
     Example:
         ```python
@@ -120,6 +125,7 @@ class Procedure:
     output_annotation: Any = None
     errors: tuple[type[TRPCError], ...] = ()
     rest: RestRoute | None = None
+    middleware: tuple[Middleware, ...] = ()
 
     def __replace__(self, /, **changes: Any) -> Procedure:
         """Return a copy of this procedure with the given fields replaced.
@@ -481,8 +487,13 @@ class Router:
         ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, middleware: Iterable[Middleware] = ()) -> None:
         """Create an empty router.
+
+        Args:
+            middleware: Router-level middleware applied — outermost first —
+                to every procedure registered afterwards; see
+                `trpc_rs_py.middleware` and `Router.use`.
 
         Example:
             ```python
@@ -492,6 +503,53 @@ class Router:
             ```
         """
         self._procedures: dict[str, Procedure] = {}
+        self._middleware: list[Middleware] = list(middleware)
+
+    def use(self, middleware: Middleware) -> Middleware:
+        """Append `middleware` to the router-level chain.
+
+        The chain is snapshotted onto each `Procedure` at registration, so
+        `use` applies to procedures registered *after* the call — matching
+        tRPC's builder semantics. Middleware registered on a router travels
+        with its procedures through `merge`/`nest`. For middleware covering
+        every procedure regardless of registration order, use the
+        mount-level `middleware=` parameter instead.
+
+        Args:
+            middleware: A `Middleware` callable `(call, next) -> result`.
+
+        Returns:
+            The same middleware (usable as a decorator).
+
+        Example:
+            ```python
+            from trpc_rs_py import Router
+
+            router = Router()
+
+            @router.use
+            async def auth(call, next):
+                if call.ctx is None:
+                    raise PermissionError("no ctx")
+                return await next()
+            ```
+        """
+        self._middleware.append(middleware)
+        return middleware
+
+    @property
+    def middleware(self) -> tuple[Middleware, ...]:
+        """The router-level chain, outermost first.
+
+        Example:
+            ```python
+            from trpc_rs_py import Router
+
+            router = Router(middleware=[lambda call, next: next()])
+            assert len(router.middleware) == 1
+            ```
+        """
+        return tuple(self._middleware)
 
     @property
     def procedures(self) -> Mapping[str, Procedure]:
@@ -811,6 +869,7 @@ class Router:
                 output_annotation=hints.get("return"),
                 errors=tuple(errors),
                 rest=rest,
+                middleware=tuple(self._middleware),
             )
             return handler
 

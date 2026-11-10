@@ -11,6 +11,19 @@
   adapters, 4 framework examples, 3 backend-only init templates, adapters
   doc, feature-matrix updates, adapter benchmarks.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
+- 0.6.0 in progress: ADR 0011 landed as two commits — context `1d25ce9`
+  (`RequestContext`, `context_factory` on all 5 adapters, leading `ctx`
+  injected everywhere and excluded from input/codegen/zod/OpenAPI;
+  `docs/context.md`; 40 tests, 401 total) and middleware (this commit:
+  `Call`/`Next`/`run_middleware` onion chain in `middleware.py` —
+  router-level `Router(middleware=[...])` + `router.use()` snapshotted at
+  registration, mount-level `middleware=` on all 8 entry points
+  outermost-first; input validation → chain → output validation;
+  subscriptions run the chain once at start, REST runs the same chain;
+  `logging_middleware`/`timing_middleware`; `docs/middleware.md`; 33
+  tests, 434 total; ~0 hot-path overhead). Next: `rate_limit` +
+  `require_auth` helpers, CORS, CSRF, tracing, test clients, playground,
+  Vercel AI SDK helpers, CLI `--json`.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0 done** →
   0.6.0 scope open (MISSION leftovers: standalone Rust server, JSONL
   streams, more npm packages, playground, middleware/CORS/CSRF/rate

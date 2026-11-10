@@ -136,6 +136,7 @@ def trpc_view(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
+    middleware: Any = (),
 ) -> Callable[..., Any]:
     """Return a Django *sync* view serving `router` as tRPC v11 endpoints.
 
@@ -151,6 +152,7 @@ def trpc_view(
         max_sse_event_size: Forwarded to `mount()`.
         context_factory: Forwarded to `mount()`; `RequestContext.request` is
             the `django.http.HttpRequest`.
+        middleware: Mount-level middleware; forwarded to `mount()`.
 
     Returns:
         A Django view callable `(request, trpc_path="") -> HttpResponse`.
@@ -173,6 +175,7 @@ def trpc_view(
                 "sse_ping_interval": sse_ping_interval,
                 "max_sse_event_size": max_sse_event_size,
                 "context_factory": context_factory,
+                "middleware": middleware,
             },
         )
     )
@@ -271,6 +274,7 @@ def trpc_view_async(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
+    middleware: Any = (),
 ) -> Callable[..., Any]:
     """Return a Django *async* view serving `router` as tRPC v11 endpoints.
 
@@ -288,6 +292,7 @@ def trpc_view_async(
         max_sse_event_size: Forwarded to `mount()`.
         context_factory: Forwarded to `mount()`; `RequestContext.request` is
             the `django.http.HttpRequest`.
+        middleware: Mount-level middleware; forwarded to `mount()`.
 
     Returns:
         An async Django view callable `(request, trpc_path="")`.
@@ -301,6 +306,7 @@ def trpc_view_async(
                 "sse_ping_interval": sse_ping_interval,
                 "max_sse_event_size": max_sse_event_size,
                 "context_factory": context_factory,
+                "middleware": middleware,
             },
         )
     )
@@ -322,6 +328,7 @@ def urlpatterns(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
+    middleware: Any = (),
 ) -> list[Any]:
     """Return `path()` entries serving `router` — the URL include helper.
 
@@ -338,6 +345,7 @@ def urlpatterns(
         sse_ping_interval: Forwarded to the view.
         max_sse_event_size: Forwarded to the view.
         context_factory: Forwarded to the view.
+        middleware: Mount-level middleware; forwarded to the view.
 
     Returns:
         A list of `django.urls.path()` objects; spread into `urlpatterns`.
@@ -362,6 +370,7 @@ def urlpatterns(
         "sse_ping_interval": sse_ping_interval,
         "max_sse_event_size": max_sse_event_size,
         "context_factory": context_factory,
+        "middleware": middleware,
     }
     view = trpc_view_async(router, **kwargs) if asynchronous else trpc_view(router, **kwargs)
     return [django_path(f"{prefix}/<path:trpc_path>", view)]

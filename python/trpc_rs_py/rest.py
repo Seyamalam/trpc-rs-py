@@ -41,6 +41,7 @@ import asyncio
 import dataclasses
 import inspect
 import json
+from collections.abc import Iterable
 from typing import Any, cast
 from urllib.parse import parse_qs, unquote
 
@@ -48,11 +49,13 @@ from ._core import CallResult, Limits, build_response
 from .asgi import ASGIApp, Receive, Scope, Send
 from .context import (
     ContextFactory,
+    RequestContext,
     ctx_injection,
     inject_ctx,
     request_context_from_scope,
 )
 from .errors import TRPCError, TRPCErrorCode, error_data_payload, http_status_for
+from .middleware import Call, Middleware, run_middleware
 from .openapi import generate_openapi
 from .router import Procedure, ProcedureKind, RestRoute, Router
 from .validation import (
@@ -142,6 +145,7 @@ def mount_rest(
     production: bool = False,
     limits: Limits | None = None,
     context_factory: ContextFactory | None = None,
+    middleware: Iterable[Middleware] = (),
 ) -> ASGIApp:
     """Serve `RestRoute` procedures as REST endpoints plus OpenAPI + docs.
 
@@ -168,6 +172,9 @@ def mount_rest(
             `RequestContext`; the returned object is injected into handlers
             whose first parameter is named `ctx`. Defaults to the
             `RequestContext` itself.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            each procedure's router-level chain — the same chain the tRPC
+            adapter runs (`trpc_rs_py.middleware`).
 
     Returns:
         An ASGI application to mount under any prefix.
@@ -190,6 +197,9 @@ def mount_rest(
         ```
     """
     resolved_limits = limits or Limits()
+    # Materialize the iterable once: it may be a generator, and the tuple is
+    # shared by every request through this mount.
+    middleware_tuple = tuple(middleware)
     document = generate_openapi(router, title=title, version=version, description=description)
     document_body = json.dumps(document)
     docs_enabled = (not production) if docs is None else docs
@@ -232,7 +242,15 @@ def mount_rest(
             if route.rest.method != method:
                 continue
             await _serve_route(
-                route, match, scope, receive, send, resolved_limits, production, context_factory
+                route,
+                match,
+                scope,
+                receive,
+                send,
+                resolved_limits,
+                production,
+                context_factory,
+                middleware_tuple,
             )
             return
         if matched_path:
@@ -254,6 +272,7 @@ def serve_attached(
     production: bool = False,
     limits: Limits | None = None,
     context_factory: ContextFactory | None = None,
+    middleware: Iterable[Middleware] = (),
 ) -> ASGIApp:
     """Internal variant of `mount_rest` for `attach(..., rest_path=...)`.
 
@@ -272,6 +291,7 @@ def serve_attached(
         limits: Request limits; protocol defaults when `None`.
         context_factory: Optional per-request context factory; see
             `mount_rest`.
+        middleware: Mount-level middleware; see `mount_rest`.
 
     Returns:
         An ASGI application dispatching under `prefix`.
@@ -285,6 +305,7 @@ def serve_attached(
         production=production,
         limits=limits,
         context_factory=context_factory,
+        middleware=middleware,
     )
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
@@ -353,6 +374,7 @@ async def _serve_route(
     limits: Limits,
     production: bool,
     context_factory: ContextFactory | None = None,
+    middleware: tuple[Middleware, ...] = (),
 ) -> None:
     """Run one matched REST call and send its JSON response."""
     request_context = request_context_from_scope(scope)
@@ -368,7 +390,7 @@ async def _serve_route(
     if isinstance(input_value, _InputError):
         await _send_error(send, 400, "BAD_REQUEST", "Invalid request body")
         return
-    status, body = await _run(route, input_value, production, ctx)
+    status, body = await _run(route, input_value, production, ctx, request_context, middleware)
     await _send_text(send, status, json.dumps(body), "application/json")
 
 
@@ -423,28 +445,50 @@ async def _read_body(receive: Receive, limit: int) -> bytes:
 
 
 async def _run(
-    route: _Route, input_value: Any, production: bool, ctx: Any = None
+    route: _Route,
+    input_value: Any,
+    production: bool,
+    ctx: Any = None,
+    request_context: RequestContext | None = None,
+    middleware: tuple[Middleware, ...] = (),
 ) -> tuple[int, Any]:
     """Execute the procedure and produce `(status, json_body)`.
 
-    Mirrors `_run_call` in `asgi.py` — same validator pipeline and the same
-    production redaction policy — but returns a REST-shaped body instead of a
-    tRPC envelope.
+    Mirrors `_run_call` in `asgi.py` — same validator pipeline, the same
+    middleware chain (mount-level `middleware` outermost, then the
+    procedure's own), and the same production redaction policy — but returns
+    a REST-shaped body instead of a tRPC envelope. Input validation runs
+    first (a parse failure never reaches middleware), then the chain, then
+    output validation after the chain unwinds (ADR 0011).
     """
     procedure = route.procedure
     try:
-        if route.input_validator is not None:
-            args, kwargs = route.input_validator(input_value)
-        else:
-            args, kwargs = (), {}
-        args, kwargs = inject_ctx(ctx_injection(procedure.handler), args, kwargs, ctx)
+        args, kwargs = (
+            route.input_validator(input_value) if route.input_validator is not None else ((), {})
+        )
     except Exception:
         return 400, _error_object("BAD_REQUEST", f"Invalid input for procedure {procedure.path}")
     try:
-        if inspect.iscoroutinefunction(procedure.handler):
-            data = await procedure.handler(*args, **kwargs)
-        else:
-            data = await asyncio.to_thread(procedure.handler, *args, **kwargs)
+
+        async def terminal(current: Call) -> Any:
+            call_args, call_kwargs = inject_ctx(
+                ctx_injection(procedure.handler), args, kwargs, current.ctx
+            )
+            if inspect.iscoroutinefunction(procedure.handler):
+                return await procedure.handler(*call_args, **call_kwargs)
+            return await asyncio.to_thread(procedure.handler, *call_args, **call_kwargs)
+
+        data = await run_middleware(
+            (*middleware, *procedure.middleware),
+            Call(
+                path=procedure.path,
+                kind=procedure.kind,
+                input=input_value,
+                ctx=ctx,
+                request_context=request_context,
+            ),
+            terminal,
+        )
     except TRPCError as error:
         message = error.message
         if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:

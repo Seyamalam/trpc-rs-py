@@ -69,6 +69,7 @@ from ._core import (
 )
 from .context import (
     ContextFactory,
+    RequestContext,
     ctx_injection,
     inject_ctx,
     request_context_from_scope,
@@ -81,6 +82,7 @@ from .errors import (
     error_data_payload,
     http_status_for,
 )
+from .middleware import Call, Middleware, run_middleware
 from .router import Procedure, ProcedureKind, Router
 from .streaming import Tracked
 from .validation import (
@@ -417,6 +419,8 @@ async def _run_call(
     production: bool,
     validators: tuple[InputValidator | None, OutputValidator | None] | None = None,
     ctx: Any = None,
+    request_context: RequestContext | None = None,
+    middleware: tuple[Middleware, ...] = (),
 ) -> CallResult:
     """Run one procedure and wrap its outcome in a `CallResult`.
 
@@ -427,6 +431,11 @@ async def _run_call(
     are mapped separately: `TRPCError` keeps its code, and anything else
     becomes `INTERNAL_SERVER_ERROR` — leaking the exception repr only in
     development mode.
+
+    The middleware chain (mount-level `middleware` outermost, then the
+    procedure's own `Procedure.middleware`) wraps the handler invocation:
+    input validation runs first, then the chain, then output validation —
+    see ADR 0011.
 
     Production error policy: in production mode a handler-raised `TRPCError`'s
     message passes through to the client, except when its code is
@@ -443,6 +452,10 @@ async def _run_call(
         ctx: The request context object injected into `ctx`-parameter
             handlers; `None` when the mount does not build one (for example
             direct unit calls).
+        request_context: The `RequestContext` for the HTTP request, exposed
+            to middleware as `Call.request_context`.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            the procedure's own chain.
 
     Returns:
         The success or error result for this call.
@@ -468,17 +481,30 @@ async def _run_call(
             TRPCErrorCode.BAD_REQUEST, f"Invalid input for procedure {path}", path=path
         )
     try:
-        if input_validator is not None:
-            args, kwargs = input_validator(input_value)
-            args, kwargs = inject_ctx(ctx_injection(procedure.handler), args, kwargs, ctx)
+        validated = input_validator(input_value) if input_validator is not None else None
+
+        async def terminal(current: Call) -> Any:
+            if validated is not None:
+                args, kwargs = validated
+                args, kwargs = inject_ctx(
+                    ctx_injection(procedure.handler), args, kwargs, current.ctx
+                )
+                if inspect.iscoroutinefunction(procedure.handler):
+                    return await procedure.handler(*args, **kwargs)
+                return await asyncio.to_thread(procedure.handler, *args, **kwargs)
             if inspect.iscoroutinefunction(procedure.handler):
-                data = await procedure.handler(*args, **kwargs)
-            else:
-                data = await asyncio.to_thread(procedure.handler, *args, **kwargs)
-        elif inspect.iscoroutinefunction(procedure.handler):
-            data = await _call_handler(procedure, input_value, ctx)
-        else:
-            data = await asyncio.to_thread(_call_handler, procedure, input_value, ctx)
+                return await _call_handler(procedure, input_value, current.ctx)
+            return await asyncio.to_thread(_call_handler, procedure, input_value, current.ctx)
+
+        chain = (*middleware, *procedure.middleware)
+        call = Call(
+            path=path,
+            kind=procedure.kind,
+            input=input_value,
+            ctx=ctx,
+            request_context=request_context,
+        )
+        data = await run_middleware(chain, call, terminal)
     except TRPCError as error:
         # Every code except INTERNAL_SERVER_ERROR is a deliberate,
         # client-facing API error raised by application code, so its message
@@ -691,6 +717,8 @@ async def _serve_subscription(
     sse_ping_interval: float | None,
     max_sse_event_size: int,
     ctx: Any = None,
+    request_context: RequestContext | None = None,
+    middleware: tuple[Middleware, ...] = (),
 ) -> None:
     """Stream one subscription procedure over SSE in the official v11 format.
 
@@ -715,8 +743,12 @@ async def _serve_subscription(
         production: When `True`, internal failures never leak details.
         validators: Optional pair of prebuilt input and output validators.
         ctx: The request context object for `ctx`-parameter handlers.
+        request_context: The `RequestContext` for the HTTP request, exposed
+            to middleware as `Call.request_context`.
         sse_ping_interval: Seconds between `ping` frames when the generator
             is idle, or `None` to disable keep-alives (the default).
+        middleware: Mount-level middleware run once at subscription start,
+            outermost first, ahead of the procedure's own chain.
         max_sse_event_size: Largest single encoded frame in bytes; a yielded
             value serializing beyond it ends the stream with an error.
 
@@ -776,14 +808,35 @@ async def _serve_subscription(
                 kwargs = dict(cast("dict[str, Any]", input_value))
             else:
                 args = (input_value,)
-        args, kwargs = inject_ctx(ctx_injection(procedure.handler), args, kwargs, ctx)
-        if _declares_last_event_id(procedure.handler):
-            kwargs["lastEventId"] = (
-                effective_last_event_id.decode("utf-8", errors="replace")
-                if isinstance(effective_last_event_id, bytes)
-                else effective_last_event_id
+
+        async def terminal(current: Call) -> Any:
+            call_args, call_kwargs = inject_ctx(
+                ctx_injection(procedure.handler), args, kwargs, current.ctx
             )
-        result = procedure.handler(*args, **kwargs)
+            if _declares_last_event_id(procedure.handler):
+                call_kwargs["lastEventId"] = (
+                    effective_last_event_id.decode("utf-8", errors="replace")
+                    if isinstance(effective_last_event_id, bytes)
+                    else effective_last_event_id
+                )
+            produced = procedure.handler(*call_args, **call_kwargs)
+            if inspect.isawaitable(produced):
+                produced = await produced
+            return produced
+
+        # The middleware chain runs once at subscription start; the result is
+        # the generator itself (ADR 0011 — the per-event path is not re-entered).
+        result = await run_middleware(
+            (*middleware, *procedure.middleware),
+            Call(
+                path=path,
+                kind=procedure.kind,
+                input=input_value,
+                ctx=ctx,
+                request_context=request_context,
+            ),
+            terminal,
+        )
     except TRPCError as error:
         message = error.message
         if production and error.code is TRPCErrorCode.INTERNAL_SERVER_ERROR:
@@ -928,6 +981,7 @@ async def _serve_trpc(
     sse_ping_interval: float | None,
     max_sse_event_size: int,
     context_factory: ContextFactory | None = None,
+    middleware: tuple[Middleware, ...] = (),
 ) -> None:
     """Parse, dispatch, and answer one HTTP request against the router.
 
@@ -954,6 +1008,8 @@ async def _serve_trpc(
         context_factory: Optional factory producing the `ctx` object once per
             request from the `RequestContext`; defaults to the
             `RequestContext` itself.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            each procedure's own chain (ADR 0011).
 
     Returns:
         `None`. The response has been sent when this coroutine finishes.
@@ -1013,6 +1069,8 @@ async def _serve_trpc(
                     sse_ping_interval=sse_ping_interval,
                     max_sse_event_size=max_sse_event_size,
                     ctx=ctx,
+                    request_context=request_context,
+                    middleware=middleware,
                 )
                 return
         bad_method_results = [
@@ -1142,6 +1200,8 @@ async def _serve_trpc(
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
                 ctx=ctx,
+                request_context=request_context,
+                middleware=middleware,
             )
             return
 
@@ -1208,7 +1268,15 @@ async def _serve_trpc(
                 )
             continue
         results.append(
-            await _run_call(procedure, call.input, production, validators.get(call.path), ctx)
+            await _run_call(
+                procedure,
+                call.input,
+                production,
+                validators.get(call.path),
+                ctx,
+                request_context,
+                middleware,
+            )
         )
 
     status, body = build_response(results, parsed.batched)
@@ -1224,6 +1292,7 @@ def mount(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int = DEFAULT_MAX_SSE_EVENT_SIZE,
     context_factory: ContextFactory | None = None,
+    middleware: Iterable[Middleware] = (),
 ) -> ASGIApp:
     """Return a standalone ASGI app serving `router` as tRPC v11 endpoints.
 
@@ -1265,6 +1334,8 @@ def mount(
             `RequestContext`; the returned object is injected into handlers
             whose first parameter is named `ctx`. Defaults to the
             `RequestContext` itself.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            each procedure's router-level chain (`trpc_rs_py.middleware`).
 
     Returns:
         An ASGI application (`Callable[[Scope, Receive, Send], Awaitable[None]]`).
@@ -1286,6 +1357,9 @@ def mount(
         ```
     """
     resolved_limits = _limits_or_default(limits)
+    # Materialize the iterable once: it may be a generator, and the tuple is
+    # shared by every request through this mount.
+    middleware_tuple = tuple(middleware)
     # Build validators once for procedures registered at construction. Later
     # registrations use the legacy signature pre-check.
     validators = {
@@ -1314,6 +1388,7 @@ def mount(
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
                 context_factory=context_factory,
+                middleware=middleware_tuple,
             )
         elif scope_type == "websocket":
             # A standalone adapter has nothing to hand a websocket to; close
@@ -1343,6 +1418,7 @@ def attach(
     max_sse_event_size: int = DEFAULT_MAX_SSE_EVENT_SIZE,
     rest_path: str | None = None,
     context_factory: ContextFactory | None = None,
+    middleware: Iterable[Middleware] = (),
 ) -> ASGIApp:
     """Wrap an existing ASGI app so `router` serves the tRPC prefix.
 
@@ -1386,6 +1462,8 @@ def attach(
             `RequestContext`; the returned object is injected into handlers
             whose first parameter is named `ctx`. Defaults to the
             `RequestContext` itself.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            each procedure's router-level chain.
 
     Returns:
         A new ASGI application wrapping `app`.
@@ -1407,6 +1485,9 @@ def attach(
         ```
     """
     resolved_limits = _limits_or_default(limits)
+    # Materialize the iterable once: it may be a generator, and the tuple is
+    # shared by every request through this attach (tRPC and REST paths alike).
+    middleware_tuple = tuple(middleware)
     # Build validators once for procedures registered at construction. Later
     # registrations use the legacy signature pre-check.
     validators = {
@@ -1428,9 +1509,10 @@ def attach(
             production=production,
             limits=resolved_limits,
             context_factory=context_factory,
+            middleware=middleware_tuple,
         )
 
-    async def middleware(scope: Any, receive: Receive, send: Send) -> None:
+    async def dispatcher(scope: Any, receive: Receive, send: Send) -> None:
         """Route tRPC requests to the router, forwarding everything else."""
         if scope["type"] == "http" and _is_trpc_path(scope, path):
             await _serve_trpc(
@@ -1445,6 +1527,7 @@ def attach(
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
                 context_factory=context_factory,
+                middleware=middleware_tuple,
             )
             return
         if (
@@ -1457,7 +1540,7 @@ def attach(
             return
         await app(scope, receive, send)
 
-    return middleware
+    return dispatcher
 
 
 def _is_trpc_path(scope: Any, path: str) -> bool:

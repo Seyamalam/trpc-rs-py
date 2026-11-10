@@ -136,6 +136,7 @@ def mount_wsgi(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
+    middleware: Any = (),
 ) -> Callable[[dict[str, Any], Callable[..., Any]], Iterable[bytes]]:
     """Return a WSGI app serving `router` as tRPC v11 endpoints.
 
@@ -162,6 +163,9 @@ def mount_wsgi(
             `RequestContext`; the returned object is injected into handlers
             whose first parameter is named `ctx`. Defaults to the
             `RequestContext` itself.
+        middleware: Mount-level middleware applied outermost-first ahead of
+            each procedure's router-level chain; forwarded to `mount()`
+            (see `trpc_rs_py.middleware`).
 
     Returns:
         A WSGI application `app(environ, start_response) -> iterable`.
@@ -191,6 +195,7 @@ def mount_wsgi(
             DEFAULT_MAX_SSE_EVENT_SIZE if max_sse_event_size is None else max_sse_event_size
         ),
         context_factory=context_factory,
+        middleware=middleware,
     )
     return wsgi_from_asgi(asgi_app)
 
@@ -210,6 +215,7 @@ def attach_flask(
     sse_ping_interval: float | None = None,
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
+    middleware: Any = (),
 ) -> Any:
     """Mount `router` under `path` on a Flask (or Werkzeug) application.
 
@@ -226,6 +232,7 @@ def attach_flask(
         sse_ping_interval: Forwarded to `mount_wsgi`.
         max_sse_event_size: Forwarded to `mount_wsgi`.
         context_factory: Forwarded to `mount_wsgi`.
+        middleware: Mount-level middleware; forwarded to `mount_wsgi`.
 
     Returns:
         The same `app`, with its `wsgi_app` wrapped by the dispatcher.
@@ -261,6 +268,7 @@ def attach_flask(
         sse_ping_interval=sse_ping_interval,
         max_sse_event_size=max_sse_event_size,
         context_factory=context_factory,
+        middleware=middleware,
     )
     mounts = {path: trpc_app}
     app.wsgi_app = DispatcherMiddleware(app.wsgi_app, mounts)
