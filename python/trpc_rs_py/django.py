@@ -137,6 +137,7 @@ def trpc_view(
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
     middleware: Any = (),
+    panel: bool | None = None,
 ) -> Callable[..., Any]:
     """Return a Django *sync* view serving `router` as tRPC v11 endpoints.
 
@@ -153,6 +154,8 @@ def trpc_view(
         context_factory: Forwarded to `mount()`; `RequestContext.request` is
             the `django.http.HttpRequest`.
         middleware: Mount-level middleware; forwarded to `mount()`.
+        panel: Serve the built-in playground at `<prefix>/panel`; forwarded
+            to `mount()` (enabled in development only, unless explicit).
 
     Returns:
         A Django view callable `(request, trpc_path="") -> HttpResponse`.
@@ -176,6 +179,7 @@ def trpc_view(
                 "max_sse_event_size": max_sse_event_size,
                 "context_factory": context_factory,
                 "middleware": middleware,
+                "panel": panel,
             },
         )
     )
@@ -275,6 +279,7 @@ def trpc_view_async(
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
     middleware: Any = (),
+    panel: bool | None = None,
 ) -> Callable[..., Any]:
     """Return a Django *async* view serving `router` as tRPC v11 endpoints.
 
@@ -293,6 +298,8 @@ def trpc_view_async(
         context_factory: Forwarded to `mount()`; `RequestContext.request` is
             the `django.http.HttpRequest`.
         middleware: Mount-level middleware; forwarded to `mount()`.
+        panel: Serve the built-in playground at `<prefix>/panel`; forwarded
+            to `mount()`.
 
     Returns:
         An async Django view callable `(request, trpc_path="")`.
@@ -307,6 +314,7 @@ def trpc_view_async(
                 "max_sse_event_size": max_sse_event_size,
                 "context_factory": context_factory,
                 "middleware": middleware,
+                "panel": panel,
             },
         )
     )
@@ -329,6 +337,7 @@ def urlpatterns(
     max_sse_event_size: int | None = None,
     context_factory: Any = None,
     middleware: Any = (),
+    panel: bool | None = None,
 ) -> list[Any]:
     """Return `path()` entries serving `router` — the URL include helper.
 
@@ -346,6 +355,8 @@ def urlpatterns(
         max_sse_event_size: Forwarded to the view.
         context_factory: Forwarded to the view.
         middleware: Mount-level middleware; forwarded to the view.
+        panel: Serve the built-in playground at `{prefix}/panel`; forwarded
+            to the view.
 
     Returns:
         A list of `django.urls.path()` objects; spread into `urlpatterns`.
@@ -371,6 +382,7 @@ def urlpatterns(
         "max_sse_event_size": max_sse_event_size,
         "context_factory": context_factory,
         "middleware": middleware,
+        "panel": panel,
     }
     view = trpc_view_async(router, **kwargs) if asynchronous else trpc_view(router, **kwargs)
     return [django_path(f"{prefix}/<path:trpc_path>", view)]

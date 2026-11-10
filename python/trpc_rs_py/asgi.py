@@ -83,6 +83,7 @@ from .errors import (
     http_status_for,
 )
 from .middleware import Call, Middleware, run_middleware
+from .panel import introspection_json, panel_subpath, serve_panel
 from .router import Procedure, ProcedureKind, Router
 from .streaming import Tracked
 from .validation import (
@@ -1293,6 +1294,7 @@ def mount(
     max_sse_event_size: int = DEFAULT_MAX_SSE_EVENT_SIZE,
     context_factory: ContextFactory | None = None,
     middleware: Iterable[Middleware] = (),
+    panel: bool | None = None,
 ) -> ASGIApp:
     """Return a standalone ASGI app serving `router` as tRPC v11 endpoints.
 
@@ -1336,6 +1338,14 @@ def mount(
             `RequestContext` itself.
         middleware: Mount-level middleware applied outermost-first ahead of
             each procedure's router-level chain (`trpc_rs_py.middleware`).
+        panel: Serve the built-in playground at `{path}/panel` — a procedure
+            list with generated input forms, live subscription viewing, and
+            an introspection document at `{path}/panel/schema`
+            (`trpc_rs_py.panel`). `None` (default) enables it only when
+            `production` is `False`; pass `True` to keep it in production
+            explicitly, `False` to disable always. The panel is answered
+            before procedure dispatch, so a procedure literally named
+            `panel` is shadowed while the panel is enabled.
 
     Returns:
         An ASGI application (`Callable[[Scope, Receive, Send], Awaitable[None]]`).
@@ -1371,11 +1381,21 @@ def mount(
         )
         for name, proc in router.procedures.items()
     }
+    # The playground panel (MISSION 2.7): on by default in development only;
+    # explicit `panel=` overrides either way.
+    panel_enabled = (not production) if panel is None else panel
+    panel_document = introspection_json(router) if panel_enabled else None
 
     async def app(scope: Any, receive: Receive, send: Send) -> None:
         """Serve one ASGI request against the router."""
         scope_type: str = scope["type"]
         if scope_type == "http":
+            procedure_path = _procedure_path(scope, path)
+            if panel_document is not None:
+                subpath = panel_subpath(procedure_path)
+                if subpath is not None:
+                    await serve_panel(scope, send, subpath=subpath, document=panel_document)
+                    return
             await _serve_trpc(
                 scope,
                 receive,
@@ -1383,7 +1403,7 @@ def mount(
                 router=router,
                 limits=resolved_limits,
                 production=production,
-                procedure_path=_procedure_path(scope, path),
+                procedure_path=procedure_path,
                 validators=validators,
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
@@ -1419,6 +1439,7 @@ def attach(
     rest_path: str | None = None,
     context_factory: ContextFactory | None = None,
     middleware: Iterable[Middleware] = (),
+    panel: bool | None = None,
 ) -> ASGIApp:
     """Wrap an existing ASGI app so `router` serves the tRPC prefix.
 
@@ -1464,6 +1485,10 @@ def attach(
             `RequestContext` itself.
         middleware: Mount-level middleware applied outermost-first ahead of
             each procedure's router-level chain.
+        panel: Serve the built-in playground at `{path}/panel` plus its
+            introspection document at `{path}/panel/schema` — same semantics
+            as `mount`'s `panel` parameter, including the `panel`-named
+            procedure shadowing.
 
     Returns:
         A new ASGI application wrapping `app`.
@@ -1511,10 +1536,18 @@ def attach(
             context_factory=context_factory,
             middleware=middleware_tuple,
         )
+    panel_enabled = (not production) if panel is None else panel
+    panel_document = introspection_json(router) if panel_enabled else None
 
     async def dispatcher(scope: Any, receive: Receive, send: Send) -> None:
         """Route tRPC requests to the router, forwarding everything else."""
         if scope["type"] == "http" and _is_trpc_path(scope, path):
+            procedure_path = _procedure_path(scope, path)
+            if panel_document is not None:
+                subpath = panel_subpath(procedure_path)
+                if subpath is not None:
+                    await serve_panel(scope, send, subpath=subpath, document=panel_document)
+                    return
             await _serve_trpc(
                 scope,
                 receive,
@@ -1522,7 +1555,7 @@ def attach(
                 router=router,
                 limits=resolved_limits,
                 production=production,
-                procedure_path=_procedure_path(scope, path),
+                procedure_path=procedure_path,
                 validators=validators,
                 sse_ping_interval=sse_ping_interval,
                 max_sse_event_size=max_sse_event_size,
