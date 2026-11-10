@@ -17,6 +17,8 @@ nav:
   - Subscriptions: subscriptions.md
   - Context: context.md
   - Middleware: middleware.md
+  - CORS: cors.md
+  - CSRF: csrf.md
   - Typed errors: typed-errors.md
   - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md

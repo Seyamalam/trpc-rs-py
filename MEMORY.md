@@ -21,9 +21,16 @@
   outermost-first; input validation → chain → output validation;
   subscriptions run the chain once at start, REST runs the same chain;
   `logging_middleware`/`timing_middleware`; `docs/middleware.md`; 33
-  tests, 434 total; ~0 hot-path overhead). Next: `rate_limit` +
-  `require_auth` helpers, CORS, CSRF, tracing, test clients, playground,
-  Vercel AI SDK helpers, CLI `--json`.
+  tests, 434 total; ~0 hot-path overhead). Built-in helpers shipped:
+  `rate_limit` (per-key token bucket → TOO_MANY_REQUESTS, threading.Lock
+  for WSGI threads, lazy idle eviction) and `require_auth` (sync/async
+  ctx predicate → UNAUTHORIZED); `cors()` (deny-by-default ASGI wrapper,
+  preflight 204/403, `*`-with-credentials reflects concrete origin) and
+  `csrf_protect()` (pre-dispatch filter on credentialed requests —
+  Sec-Fetch-Site safe values allow, cross-site requires exact Origin,
+  fixed 403 body) — both work on all adapters via the ADR 0010 bridge.
+  496 total tests. Next: `tracing_middleware` (optional otel), test
+  clients, playground, Vercel AI SDK helpers, CLI `--json`.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → **0.5.0 done** →
   0.6.0 scope open (MISSION leftovers: standalone Rust server, JSONL
   streams, more npm packages, playground, middleware/CORS/CSRF/rate
