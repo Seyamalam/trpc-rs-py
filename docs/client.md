@@ -1,0 +1,122 @@
+# Python client
+
+`trpc_rs_py.client` is the real-network counterpart of
+[`testing.test_client`](testing.md): the same tRPC v11 wire contract — GET
+`?input=<json>` queries, POST JSON mutations, `?batch=1` batches, SSE
+subscriptions — over an actual HTTP connection. Use it when one Python
+service calls a tRPC server (yours or the official TypeScript one), or for
+smoke tests against a deployed app.
+
+The sync client is stdlib-only (`urllib`); the async client needs the
+optional [`httpx`](https://www.python-httpx.org/) package, imported lazily
+so the package stays dependency-free. Calling `create_async_client`
+without `httpx` installed raises `RuntimeError` naming the extra.
+
+```python
+from trpc_rs_py.client import create_client
+
+with create_client("http://localhost:8000/trpc") as client:
+    assert client.query("ping") == "pong"
+    client.mutation("posts.create", {"title": "hi"})
+```
+
+```python
+from trpc_rs_py.client import create_async_client  # pip install httpx
+
+async with create_async_client("http://localhost:8000/trpc") as client:
+    print(await client.query("ping"))
+```
+
+## `create_client(url, *, headers=None, timeout=30.0)` / `create_async_client`
+
+| Parameter | Contents |
+| --- | --- |
+| `url` | tRPC base URL; requests go to `{url}/{proc_path}` |
+| `headers` | Mapping merged into every request (auth tokens etc.) |
+| `timeout` | Seconds per operation (`None` blocks forever) |
+
+Both clients expose the same call surface (async variants are `async`):
+
+| Member | Contents |
+| --- | --- |
+| `query(path, input=None)` | GET call; returns `result.data`, raises `TrpcClientError` |
+| `mutation(path, input=None)` | POST JSON call, same unwrap |
+| `batch(calls)` | One `?batch=1` GET; per-call values/`TrpcClientError` instances |
+| `subscribe(path, input=None, *, last_event_id=None)` | SSE stream; (async) iterator of `SubscriptionEvent` |
+| `close()` | Release in-flight streams/connections; context managers supported |
+
+`batch` takes `{"path": ..., "input": ...}` mappings and preserves order.
+A failing call yields a `TrpcClientError` **instance** in the list — the
+server answers one response whose status follows the worst per-call
+error while still carrying every result, so the client reads the body
+before judging the status. A top-level failure (mixed procedure kinds)
+raises instead.
+
+```python
+results = client.batch([{"path": "ping"}, {"path": "boom"}])
+assert results[0] == "pong"
+assert isinstance(results[1], TrpcClientError)
+```
+
+## `TrpcClientError`
+
+Raised by `query`/`mutation`/`subscribe` and returned per-call by
+`batch`. Fields mirror `TrpcTestClientError`: `code` (the string code
+from `error.data.code`, e.g. `"NOT_FOUND"`, or `"UNKNOWN"` when no tRPC
+envelope arrived), `message`, `data` (the `error.data` mapping with
+`path`/`httpStatus`/typed extras), `http_status`. Transport failures
+that never produced a response (`URLError`, timeouts) propagate as-is.
+
+## Subscriptions and resume
+
+`subscribe` streams `SubscriptionEvent(data, id)` — `id` is set for
+[`tracked()`](subscriptions.md) events and is the resume handle: pass it
+back via `last_event_id` after a reconnect and the server continues from
+that id (`lastEventId` rides inside the input object, exactly like the
+official client). A mid-stream failure arrives as a `serialized-error`
+frame and raises `TrpcClientError`; control frames (`connected`, `ping`,
+`return`) are consumed silently.
+
+```python
+for event in client.subscribe("ticks", {"count": 5}):
+    print(event.data, event.id)
+# resume after a drop:
+for event in client.subscribe("ticks", last_event_id=event.id):
+    ...
+```
+
+## `trpc-py codegen py-client`
+
+`trpc_rs_py.pyclient.generate_python_client(router)` — and the CLI
+equivalent — emits a typed wrapper module: one `AppRouterClient` method
+per procedure with the handler's own annotations (leading `ctx` and
+subscription `lastEventId` excluded — the server injects them). Dotted
+paths become method names (`posts.by_id` → `posts_by_id`); each method
+packs its arguments into the wire input and delegates to a `Client` you
+supply.
+
+```console
+$ trpc-py codegen py-client --app myapp:router --out myapp/client.py
+trpc-py codegen: wrote myapp/client.py
+```
+
+```python
+# generated file (excerpt)
+class AppRouterClient:
+    def __init__(self, client: Client) -> None: ...
+
+    def posts_by_id(self, post_id: int) -> Post:
+        """Call the `posts.by_id` query procedure."""
+        return cast(Post, self._client.query("posts.by_id", {"post_id": post_id}))
+```
+
+```python
+from myapp.client import AppRouterClient
+
+client = AppRouterClient(create_client("http://localhost:8000/trpc"))
+post = client.posts_by_id(1)  # fully typed, one HTTP call
+```
+
+Check the generated file in: it type-checks under strict mypy/pyright
+and keeps call sites honest when handler signatures change — regenerate
+and let the type checker find the drift.

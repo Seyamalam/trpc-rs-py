@@ -1,16 +1,17 @@
 """`trpc-py` command-line interface.
 
 Python `argparse` implementation per ADR 0006 — the command names, flags,
-exit codes, and `--json` output are the stable contract; the implementation
-language may move to `clap` when the standalone server ships. Commands:
+exit codes, and `--json` output are the stable contract. Commands:
 
 * `dev` — live type sync: watch Python sources, regenerate `.d.ts` on save.
 * `init` — scaffold a starter project (Next.js + FastAPI).
 * `codegen ts` — one-off TypeScript declaration generation.
 * `codegen openapi` — one-off OpenAPI 3.1 document generation.
+* `codegen py-client` — one-off Python `AppRouterClient` stub generation.
 * `routes` — list procedures with kinds and signatures.
 * `check` — validate that a router generates cleanly.
 * `doctor` — environment info for bug reports.
+* `serve` — run the standalone Rust server (ADR 0013).
 """
 
 from __future__ import annotations
@@ -85,6 +86,17 @@ def _cmd_dev(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_serve(args: argparse.Namespace) -> int:
+    from .serve import serve
+
+    router = _load_router(args.app)
+    try:
+        return serve(router, host=args.host, port=args.port, production=args.production)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"trpc-py serve: {error}", file=sys.stderr)
+        return 1
+
+
 def _cmd_codegen(args: argparse.Namespace) -> int:
     from .codegen import generate_types
 
@@ -108,6 +120,23 @@ def _cmd_codegen_zod(args: argparse.Namespace) -> int:
     router = _load_router(args.app)
     try:
         source = generate_zod(router)
+    except TypeError as error:
+        print(f"trpc-py codegen: {error}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(source)
+    print(f"trpc-py codegen: wrote {out}")
+    return 0
+
+
+def _cmd_codegen_py_client(args: argparse.Namespace) -> int:
+    """Handle `trpc-py codegen py-client`: write the AppRouterClient stub."""
+    from .pyclient import generate_python_client
+
+    router = _load_router(args.app)
+    try:
+        source = generate_python_client(router)
     except TypeError as error:
         print(f"trpc-py codegen: {error}", file=sys.stderr)
         return 1
@@ -362,6 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
     codegen_openapi.add_argument("--title", default=None, help="info.title override")
     codegen_openapi.add_argument("--version", default=None, help="info.version override")
     codegen_openapi.set_defaults(handler=_cmd_codegen_openapi)
+    codegen_py_client = codegen_sub.add_parser(
+        "py-client", help="emit the Python client stub (AppRouterClient, .py)"
+    )
+    codegen_py_client.add_argument(
+        "--app", required=True, help="router import string (module:attribute)"
+    )
+    codegen_py_client.add_argument("--out", required=True, help="destination .py path")
+    codegen_py_client.set_defaults(handler=_cmd_codegen_py_client)
 
     init = subcommands.add_parser("init", help="scaffold a starter project")
     init.add_argument("name", help="project name (also the default directory)")
@@ -387,6 +424,17 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subcommands.add_parser("doctor", help="print environment info for bug reports")
     doctor.add_argument("--json", action="store_true", help="emit JSON")
     doctor.set_defaults(handler=_cmd_doctor)
+
+    serve = subcommands.add_parser("serve", help="run the standalone Rust server")
+    serve.add_argument("--app", required=True, help="router import string (module:attribute)")
+    serve.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=8000, help="bind port (default: 8000)")
+    serve.add_argument(
+        "--production",
+        action="store_true",
+        help="redact internal errors and disable the panel",
+    )
+    serve.set_defaults(handler=_cmd_serve)
 
     return parser
 
