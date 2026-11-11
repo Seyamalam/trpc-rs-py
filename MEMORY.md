@@ -86,8 +86,7 @@
   toolchain installed. Delegates via ACP acp-mcp-call (servers MCP was
   down): fuzz+limits swe-2-high, audit swe-2-flash.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → 0.5.0 (done) →
-  0.6.0 (done) → 0.7.0 (done) → **0.8.0 in progress** (security shipped;
-  release remaining;
+  0.6.0 (done) → 0.7.0 (done) → **0.8.0 released v0.8.0** (security + release shipped;
   released; wheel+sdist on PyPI via maturin upload).
 
 ## What is done
