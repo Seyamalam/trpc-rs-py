@@ -50,7 +50,7 @@
   Panel introspection uses the full-parameter OBJECT schema for
   inputs (a scalar first-param schema would generate wire-invalid
   forms). HANDOFF.md deleted at release.
-- **0.7.0 in progress** (uncommitted→commits on main): ADR 0013 —
+- **0.7.0 released** (`v0.7.0` on PyPI+GitHub): ADR 0013 —
   standalone server is a Rust ASGI server in-process (hyper 1.x →
   synthesized ASGI scope → drives `mount()` coroutine via
   `asyncio.run_coroutine_threadsafe`; NO pyo3-async-runtimes — stdlib
@@ -75,8 +75,8 @@
   --app M:A --out F`. 651 tests (595+56). benchmarks/run.py gained
   `trpc-standalone` server entry (apps.py `__main__` spawns it).
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → 0.5.0 (done) →
-  0.6.0 (done) → **0.7.0 in progress** (client+standalone landed;
-  performance pass + release remaining).
+  0.6.0 (done) → **0.7.0 released v0.7.0** (client+standalone+perf pass;
+  released; wheel+sdist on PyPI via maturin upload).
 
 ## What is done
 
