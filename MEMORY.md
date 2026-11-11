@@ -74,8 +74,20 @@
   excluded, cast() bodies for strict mypy); CLI `codegen py-client
   --app M:A --out F`. 651 tests (595+56). benchmarks/run.py gained
   `trpc-standalone` server entry (apps.py `__main__` spawns it).
+- **0.8.0 in progress**: SECURITY.md + threat-model (`docs/security/`),
+  ADR 0015 `procedure_timeout` (Limits field, wait_for on handler call →
+  TIMEOUT/-32008/408; NOT on protocol::Limits — dispatch-level; subs
+  excluded; `mount_rest` unenforced — documented). SSE buf/sub-count
+  limits were already covered (`max_sse_event_size`, batch cap + 1
+  stream/request). scripts/audit.sh: cargo-deny+pip-audit+pnpm all green;
+  fixed trpc-core wildcard dep (`version=">=0.7.0"` — bounded, survives
+  bumps). fuzz/: 4 cargo-fuzz targets (~6.7M clean runs), `just
+  fuzz-smoke 60` + `scripts/audit.sh` wired into release-check; nightly
+  toolchain installed. Delegates via ACP acp-mcp-call (servers MCP was
+  down): fuzz+limits swe-2-high, audit swe-2-flash.
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → 0.5.0 (done) →
-  0.6.0 (done) → **0.7.0 released v0.7.0** (client+standalone+perf pass;
+  0.6.0 (done) → 0.7.0 (done) → **0.8.0 in progress** (security shipped;
+  release remaining;
   released; wheel+sdist on PyPI via maturin upload).
 
 ## What is done

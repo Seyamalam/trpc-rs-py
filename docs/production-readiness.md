@@ -7,9 +7,14 @@ linked. The release is blocked until all boxes are checked.
 - [ ] Every differentiator in MISSION.md section 2 is complete, tested, and documented.
 - [ ] Feature matrix has no "partial" items in the core protocol rows.
 - [ ] Coverage targets met (>= 90% lines, Rust `cargo llvm-cov` and Python `pytest-cov`).
-- [ ] Fuzzer ran at least 1 hour per target with no crashes.
-- [ ] All dependency audits clean (`cargo audit`, `cargo deny`, `pip-audit`, `pnpm audit`).
-- [ ] Threat model written and every listed risk mitigated or documented (`docs/security/threat-model.md`).
+- [ ] Fuzzer ran at least 1 hour per target with no crashes (targets exist
+  and pass bounded smoke via `just fuzz-smoke`; the 1-hour soak is
+  outstanding — see `docs/security/fuzzing.md`).
+- [x] All dependency audits clean (`cargo deny` advisories/bans/licenses/sources,
+  `pip-audit`, `pnpm audit` — `scripts/audit.sh` exits 0; see
+  `docs/security/audit-report.md`).
+- [x] Threat model written and every listed risk mitigated or documented
+  (`docs/security/threat-model.md`; residual risks are listed and accepted).
 - [ ] Benchmarks published, and adapter overhead over a plain JSON view is documented.
 - [ ] Wheels build and install for Linux (x86_64, aarch64, manylinux and musllinux), macOS (x86_64, arm64), and Windows (x86_64). npm packages build and pack cleanly.
 - [ ] Every example and template runs from a clean checkout following its README.
