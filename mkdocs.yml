@@ -34,6 +34,8 @@ nav:
   - Validation: validation.md
   - TypeScript Codegen: codegen.md
   - Production Readiness: production-readiness.md
+  - Security:
+      - Threat model: security/threat-model.md
   - Launch materials:
       - Overview: launch/README.md
       - ai-chat demo: launch/ai-chat.md
@@ -55,3 +57,4 @@ nav:
       - 0012 Vercel AI SDK transport: decisions/0012-vercel-ai-sdk.md
       - 0013 Standalone server: decisions/0013-standalone-server.md
       - 0014 Python client: decisions/0014-python-client.md
+      - 0015 Procedure timeout and SSE limits: decisions/0015-procedure-timeout-and-sse-limits.md
