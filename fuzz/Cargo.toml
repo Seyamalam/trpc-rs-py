@@ -1,0 +1,52 @@
+# cargo-fuzz crate for the trpc-core protocol parser (MISSION.md section 7).
+# Deliberately NOT a workspace member: cargo-fuzz requires its own crate so the
+# instrumented nightly build stays isolated from the pinned stable toolchain.
+# The empty [workspace] table detaches this package from the root workspace.
+
+[package]
+name = "trpc-core-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.96"
+publish = false
+license = "MIT"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+trpc-core = { path = "../crates/trpc-core" }
+
+[[bin]]
+name = "parse_get_query"
+path = "fuzz_targets/parse_get_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_post_body"
+path = "fuzz_targets/parse_post_body.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_batch"
+path = "fuzz_targets/parse_batch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sse_encode"
+path = "fuzz_targets/sse_encode.rs"
+test = false
+doc = false
+bench = false

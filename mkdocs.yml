@@ -18,6 +18,7 @@ nav:
   - Vercel AI SDK: ai-sdk.md
   - Context: context.md
   - Middleware: middleware.md
+  - Limits: limits.md
   - CORS: cors.md
   - CSRF: csrf.md
   - Playground: playground.md
@@ -36,6 +37,8 @@ nav:
   - Production Readiness: production-readiness.md
   - Security:
       - Threat model: security/threat-model.md
+      - Fuzzing: security/fuzzing.md
+      - Audit report: security/audit-report.md
   - Launch materials:
       - Overview: launch/README.md
       - ai-chat demo: launch/ai-chat.md

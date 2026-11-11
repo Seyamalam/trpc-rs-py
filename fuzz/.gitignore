@@ -1,0 +1,5 @@
+# cargo-fuzz working artifacts (see docs/security/fuzzing.md)
+target
+corpus
+artifacts
+coverage

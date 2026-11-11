@@ -58,11 +58,26 @@ bench:
     uv run python benchmarks/run.py
     uv run python benchmarks/plot.py
 
+# Bounded cargo-fuzz smoke over the protocol parser (MISSION.md section 7).
+# Requires a nightly toolchain and cargo-fuzz; never part of ci/ci-fast.
+fuzz-smoke seconds="60":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd fuzz
+    for target in parse_get_query parse_post_body parse_batch sse_encode; do
+        mkdir -p "corpus/$target"
+        echo "== fuzz target: $target ({{seconds}}s) =="
+        cargo +nightly fuzz run "$target" "corpus/$target" "seeds/$target" \
+            -- -max_total_time={{seconds}}
+    done
+
 # Release gate: full CI + benchmarks + audits + fuzzers (short) + cross-platform wheels.
 release-check: ci
     uv run python benchmarks/run.py
     uv run python benchmarks/plot.py
-    @echo "release-check: audits, fuzzers and cross-platform wheels land in 0.8.0+ (see MISSION.md roadmap)"
+    just fuzz-smoke 60
+    bash scripts/audit.sh
+    @echo "release-check: cross-platform wheels land in 0.9.x (see MISSION.md roadmap)"
 
 # Individual pieces for quick iteration.
 fmt:
