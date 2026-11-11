@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-11
+
+### Added
+
+- `Limits(procedure_timeout=)` (ADR 0015): each handler invocation is
+  bounded by `asyncio.wait_for`; expiry produces the `TIMEOUT` envelope
+  (-32008 / HTTP 408) per call, including inside batches. Subscriptions
+  are excluded; middleware time is not counted. Negative/non-finite
+  values fail at construction. (Not enforced on `mount_rest`.)
+- `SECURITY.md` — vulnerability reporting policy, supported versions,
+  and a deployment hardening checklist.
+- `docs/security/threat-model.md` — six threat classes mapped to
+  concrete mitigations, plus documented residual risks and the
+  structurally-bounded limits (subscriptions-per-connection, per-client
+  SSE buffering).
+- `fuzz/` — four cargo-fuzz targets over the protocol attack surface
+  (GET query parse, POST body parse, batch parse, SSE encode) with a
+  shared fuzzed-`Limits` helper; `just fuzz-smoke [seconds]` runs them
+  bounded and `just release-check` invokes a 60-second smoke.
+- `scripts/audit.sh` + `deny.toml` — dependency audits across
+  cargo-deny (advisories/bans/licenses/sources), pip-audit, and pnpm;
+  wired into `release-check`. Report: `docs/security/audit-report.md`.
+- `docs/limits.md` — every limit knob, its default, enforcement point,
+  and the sync-handler caveat.
+
+### Fixed
+
+- `trpc-core` path dependency now declares `version = ">=0.7.0"` —
+  cargo-deny's wildcard check passes.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added
