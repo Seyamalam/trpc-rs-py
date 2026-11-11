@@ -22,6 +22,8 @@ nav:
   - CSRF: csrf.md
   - Playground: playground.md
   - Testing: testing.md
+  - Python client: client.md
+  - Standalone server: standalone.md
   - Typed errors: typed-errors.md
   - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md
@@ -50,3 +52,5 @@ nav:
       - 0010 WSGI/Django adapter bridge: decisions/0010-wsgi-django-adapter-bridge.md
       - 0011 Context and middleware: decisions/0011-context-and-middleware.md
       - 0012 Vercel AI SDK transport: decisions/0012-vercel-ai-sdk.md
+      - 0013 Standalone server: decisions/0013-standalone-server.md
+      - 0014 Python client: decisions/0014-python-client.md

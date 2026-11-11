@@ -50,9 +50,33 @@
   Panel introspection uses the full-parameter OBJECT schema for
   inputs (a scalar first-param schema would generate wire-invalid
   forms). HANDOFF.md deleted at release.
+- **0.7.0 in progress** (uncommitted→commits on main): ADR 0013 —
+  standalone server is a Rust ASGI server in-process (hyper 1.x →
+  synthesized ASGI scope → drives `mount()` coroutine via
+  `asyncio.run_coroutine_threadsafe`; NO pyo3-async-runtimes — stdlib
+  asyncio bridge is identical semantics with one fewer dep). GIL-free
+  block via `py.detach`; shutdown on Ctrl-C OR asyncio-loop stop
+  (`loop_watch` = signal-free deterministic test hook). 16-chunk mpsc
+  backpressure bridge `_AsgiBridge` (arm/start/offer/finish/done);
+  `Drop` on response channel wakes both receive() (http.disconnect) and
+  send() so subscription cancellation runs; `Limits.max_body_size`
+  enforced at transport level with same PAYLOAD_TOO_LARGE envelope.
+  `serve.py::serve(router=None, *, app=None, ...)` — router XOR app,
+  asyncio loop on `trpc-rs-py-serve` daemon thread, returns 0.
+  `trpc-py serve --app M:A [--host --port --production]`.
+  ADR 0014 — `client.py`: `create_client` (stdlib urllib) /
+  `create_async_client` (lazy httpx w/ install hint), query/mutation/
+  batch/subscribe, `TrpcClientError` (.code/.message/.data/.http_status),
+  frozen `SubscriptionEvent(data,id)`; batch reads body on HTTP-error
+  status (mixed per-call results); async subscribe must `aread()` before
+  `.json()` (ResponseNotRead). `pyclient.py::generate_python_client`
+  emits `AppRouterClient` copying handler annotations (ctx/lastEventId
+  excluded, cast() bodies for strict mypy); CLI `codegen py-client
+  --app M:A --out F`. 651 tests (595+56). benchmarks/run.py gained
+  `trpc-standalone` server entry (apps.py `__main__` spawns it).
 - Roadmap: 0.2.0 (done) → 0.3.0 (done) → 0.4.0 (done) → 0.5.0 (done) →
-  **0.6.0 done** → 0.7.0 scope (Python client `serve`/`codegen py-client`,
-  standalone Rust server, performance pass).
+  0.6.0 (done) → **0.7.0 in progress** (client+standalone landed;
+  performance pass + release remaining).
 
 ## What is done
 
