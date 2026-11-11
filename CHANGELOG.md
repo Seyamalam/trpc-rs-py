@@ -5,6 +5,43 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-11
+
+### Added
+
+- Standalone Rust server (ADR 0013): `_core.serve` binds hyper 1.x on a
+  multi-thread Tokio runtime, synthesizes full ASGI HTTP scopes, and
+  drives the existing `mount()` application — so validation, middleware,
+  context, CORS/CSRF wrappers, the panel, and SSE cancellation behave
+  identically without a second dispatch implementation. Bounded
+  backpressure via a 16-chunk response channel; client disconnect wakes
+  `receive()`/`send()` so subscription cleanup runs; request bodies are
+  capped by `Limits.max_body_size` with the same `PAYLOAD_TOO_LARGE`
+  envelope. Blocks GIL-free until Ctrl-C or the asyncio loop stops.
+- `trpc_rs_py.serve.serve()` — Python entry point taking a router
+  (mounted with the usual options) or an arbitrary ASGI `app=`, plus
+  `trpc-py serve --app module:attribute [--host --port --production]`.
+- Python client (ADR 0014): `trpc_rs_py.client` —
+  `create_client` (stdlib `urllib`) and `create_async_client` (lazy
+  `httpx` with an install hint) exposing `query`, `mutation`, `batch`,
+  and SSE `subscribe` with `lastEventId` resume, `tracked()` event ids,
+  per-call batch errors, and `TrpcClientError` carrying code, message,
+  data, and HTTP status.
+- `trpc_rs_py.pyclient.generate_python_client` + `trpc-py codegen
+  py-client --app M:A --out F` — emits a typed `AppRouterClient` copying
+  handler annotations (`ctx`/`lastEventId` excluded), so generated
+  clients are strict-mypy clean.
+- `docs/performance.md` — first profiling findings: the standalone
+  server is ~43% faster than trpc-fastapi on single queries and beats
+  plain FastAPI on query/mutation workloads; batch remains
+  dispatch-bound.
+- Benchmark harness gained a `trpc-standalone` HTTP-load entry.
+
+### Fixed
+
+- Async client `subscribe` reads the response body before parsing error
+  envelopes on non-2xx, avoiding `ResponseNotRead` leaks.
+
 ## [0.6.0] - 2026-11-10
 
 ### Added
