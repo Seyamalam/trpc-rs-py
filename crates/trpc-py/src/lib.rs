@@ -65,6 +65,10 @@ mod ffi {
     }
 
     /// Configurable request limits.
+    ///
+    /// `procedure_timeout` is enforced by the Python dispatch layer around
+    /// each handler invocation (ADR 0015); it is not part of
+    /// `trpc_core::protocol::Limits`, which covers request parsing only.
     #[pyclass(
         module = "trpc_rs_py._core",
         name = "Limits",
@@ -76,24 +80,37 @@ mod ffi {
         body_size: usize,
         batch_size: usize,
         json_depth: usize,
+        procedure_timeout: Option<f64>,
     }
 
     #[pymethods]
     impl PyLimits {
         /// Create request limits, defaulting each omitted setting independently.
+        ///
+        /// `procedure_timeout` bounds one procedure handler invocation in
+        /// seconds; `None` (the default) disables it. Negative or
+        /// non-finite values are rejected so a bad config fails fast at
+        /// construction instead of expiring every call.
         #[new]
-        #[pyo3(signature = (*, max_body_size=None, max_batch_size=None, max_json_depth=None))]
+        #[pyo3(signature = (*, max_body_size=None, max_batch_size=None, max_json_depth=None, procedure_timeout=None))]
         fn new(
             max_body_size: Option<usize>,
             max_batch_size: Option<usize>,
             max_json_depth: Option<usize>,
-        ) -> Self {
+            procedure_timeout: Option<f64>,
+        ) -> PyResult<Self> {
+            if procedure_timeout.is_some_and(|timeout| !timeout.is_finite() || timeout < 0.0) {
+                return Err(PyValueError::new_err(
+                    "procedure_timeout must be a non-negative finite number of seconds",
+                ));
+            }
             let defaults = protocol::Limits::default();
-            Self {
+            Ok(Self {
                 body_size: max_body_size.unwrap_or(defaults.max_body_size),
                 batch_size: max_batch_size.unwrap_or(defaults.max_batch_size),
                 json_depth: max_json_depth.unwrap_or(defaults.max_json_depth),
-            }
+                procedure_timeout,
+            })
         }
 
         /// Maximum request body or encoded input size in bytes.
@@ -110,6 +127,11 @@ mod ffi {
         #[getter]
         fn max_json_depth(&self) -> usize {
             self.json_depth
+        }
+        /// Per-procedure timeout in seconds, or `None` when disabled.
+        #[getter]
+        fn procedure_timeout(&self) -> Option<f64> {
+            self.procedure_timeout
         }
     }
 
@@ -787,6 +809,7 @@ mod ffi {
                 body_size: 123,
                 batch_size: 7,
                 json_depth: 9,
+                procedure_timeout: Some(1.5),
             };
             let limits: protocol::Limits = py_limits.into();
             assert_eq!(limits.max_body_size, 123);

@@ -21,13 +21,19 @@ class TrpcProtocolError(Exception):
 
 @final
 class Limits:
-    """Request size, batch size, and JSON depth limits."""
+    """Request size, batch size, JSON depth, and procedure timeout limits.
+
+    `procedure_timeout` bounds one procedure handler invocation in seconds
+    and is enforced by the dispatch layer, not the protocol parser; `None`
+    (the default) disables it.
+    """
     def __new__(
         cls,
         *,
         max_body_size: int | None = None,
         max_batch_size: int | None = None,
         max_json_depth: int | None = None,
+        procedure_timeout: float | None = None,
     ) -> Limits: ...
     @property
     def max_body_size(self) -> int: ...
@@ -35,6 +41,8 @@ class Limits:
     def max_batch_size(self) -> int: ...
     @property
     def max_json_depth(self) -> int: ...
+    @property
+    def procedure_timeout(self) -> float | None: ...
 
 @final
 class ParsedCall:

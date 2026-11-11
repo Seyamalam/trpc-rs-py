@@ -153,8 +153,8 @@ def mount_wsgi(
             `/trpc`.
         production: When `True`, internal errors never leak details; see
             `mount()` for the exact policy.
-        limits: Request limits (body size, batch size, JSON depth); protocol
-            defaults when `None`.
+        limits: Request limits (body size, batch size, JSON depth, procedure
+            timeout); protocol defaults when `None`.
         sse_ping_interval: Seconds between SSE `ping` frames on idle streams,
             or `None` (default). Recommended under WSGI so dropped
             connections are noticed on the next write.

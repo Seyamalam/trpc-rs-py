@@ -422,6 +422,7 @@ async def _run_call(
     ctx: Any = None,
     request_context: RequestContext | None = None,
     middleware: tuple[Middleware, ...] = (),
+    procedure_timeout: float | None = None,
 ) -> CallResult:
     """Run one procedure and wrap its outcome in a `CallResult`.
 
@@ -445,6 +446,15 @@ async def _run_call(
     other codes are deliberate client-facing API errors). In development mode
     every `TRPCError` message passes through unchanged.
 
+    When `procedure_timeout` is set, the handler invocation is awaited under
+    `asyncio.wait_for`; expiry becomes `TRPCError` with code `TIMEOUT` (HTTP
+    408). The bound wraps the *handler* call only — input/output validation
+    and the middleware chain run outside it, so middleware time is not
+    double-counted (ADR 0015). A sync handler cannot be preempted mid-call:
+    after the wait times out its `asyncio.to_thread` worker still runs to
+    completion in the background — the bound is on *waiting*, not CPU burn,
+    so CPU-bound handlers belong off the event loop.
+
     Args:
         procedure: The registered procedure to run.
         input_value: Decoded JSON input for the call.
@@ -457,6 +467,8 @@ async def _run_call(
             to middleware as `Call.request_context`.
         middleware: Mount-level middleware applied outermost-first ahead of
             the procedure's own chain.
+        procedure_timeout: Seconds the handler invocation may take before
+            the call fails with `TIMEOUT`, or `None` (default) for no bound.
 
     Returns:
         The success or error result for this call.
@@ -484,7 +496,7 @@ async def _run_call(
     try:
         validated = input_validator(input_value) if input_validator is not None else None
 
-        async def terminal(current: Call) -> Any:
+        async def invoke_handler(current: Call) -> Any:
             if validated is not None:
                 args, kwargs = validated
                 args, kwargs = inject_ctx(
@@ -496,6 +508,17 @@ async def _run_call(
             if inspect.iscoroutinefunction(procedure.handler):
                 return await _call_handler(procedure, input_value, current.ctx)
             return await asyncio.to_thread(_call_handler, procedure, input_value, current.ctx)
+
+        async def terminal(current: Call) -> Any:
+            if procedure_timeout is None:
+                return await invoke_handler(current)
+            try:
+                return await asyncio.wait_for(invoke_handler(current), procedure_timeout)
+            except TimeoutError as error:
+                raise TRPCError(
+                    f'Procedure "{path}" timed out after {procedure_timeout} seconds',
+                    code=TRPCErrorCode.TIMEOUT,
+                ) from error
 
         chain = (*middleware, *procedure.middleware)
         call = Call(
@@ -992,13 +1015,18 @@ async def _serve_trpc(
     rejected the same as an unsupported media type, but charset parameters
     are lenient), stops without a response when the client disconnects
     mid-body, and maps unsupported HTTP methods to `METHOD_NOT_SUPPORTED`.
+    When `limits.procedure_timeout` is set, each query/mutation handler
+    invocation is bounded by it and expiry produces a `TIMEOUT` envelope
+    (ADR 0015); subscription streams are exempt — they are long-lived by
+    design.
 
     Args:
         scope: Raw ASGI scope for an `http` request.
         receive: ASGI receive callable.
         send: ASGI send callable.
         router: The router serving procedures.
-        limits: Configured request limits.
+        limits: Configured request limits; `procedure_timeout` bounds each
+            query/mutation handler invocation (not subscription streams).
         production: When `True`, internal errors never leak details.
         procedure_path: Dotted procedure path extracted from the URL.
         validators: Validators built once at adapter construction for each
@@ -1277,6 +1305,7 @@ async def _serve_trpc(
                 ctx,
                 request_context,
                 middleware,
+                procedure_timeout=limits.procedure_timeout,
             )
         )
 
@@ -1323,8 +1352,8 @@ def mount(
         router: The router whose procedures are served.
         path: Mount path prefix, used to strip itself when the framework did
             not. Defaults to `/trpc`.
-        limits: Request limits (body size, batch size, JSON depth); protocol
-            defaults when `None`.
+        limits: Request limits (body size, batch size, JSON depth, procedure
+            timeout); protocol defaults when `None`.
         production: See the production error policy above; `False` (default)
             is for development.
         sse_ping_interval: Seconds between SSE `ping` keep-alive frames while
@@ -1464,8 +1493,8 @@ def attach(
         app: The ASGI app to wrap; non-tRPC requests pass through to it.
         router: The router whose procedures are served.
         path: tRPC endpoint prefix. Defaults to `/trpc`.
-        limits: Request limits (body size, batch size, JSON depth); protocol
-            defaults when `None`.
+        limits: Request limits (body size, batch size, JSON depth, procedure
+            timeout); protocol defaults when `None`.
         production: See the production error policy above; `False` (default)
             is for development.
         sse_ping_interval: Seconds between SSE `ping` keep-alive frames while
