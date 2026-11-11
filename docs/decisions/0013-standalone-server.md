@@ -1,0 +1,75 @@
+# ADR 0013: Standalone server — a Rust ASGI server in-process
+
+Status: Accepted
+Date: 2026-11-11
+
+## Context
+
+MISSION section 3 calls for an optional standalone server: a Rust HTTP
+server that serves a `Router` for maximum throughput without a Python web
+framework, exposed as `trpc-py serve` (section 8). ADR 0004 already chose
+hyper 1.x + `http-body-util` over axum/actix-web so nothing sits between
+the socket and `trpc-core`.
+
+The open question is how hyper, running tokio worker threads, invokes
+Python handler code, which lives behind the GIL and inside `async`
+machinery (handlers, middleware, async generators for SSE).
+
+## Options
+
+1. **Reimplement dispatch in Rust, call handlers individually.** trpc-core
+   would route to a per-procedure Python callable. Rejected: it duplicates
+   the entire dispatch path — validation, context_factory, middleware
+   chains, `ctx`/`lastEventId` injection, panel, error envelopes — which
+   all live in `trpc_rs_py.asgi` today, and would drift from it forever.
+2. **Drive the existing `mount()` ASGI app from Rust.** hyper parses the
+   socket bytes, synthesizes a standard ASGI `scope`, calls the ASGI app
+   coroutine, and streams the `http.response.*` messages back. All Python
+   semantics come for free — including the `/trpc/panel` playground, and
+   `cors()`/`csrf_protect()` ASGI wrappers. `serve` becomes "a Rust ASGI
+   server in the same process", not "a second tRPC implementation".
+3. **Spawn uvicorn/granian as a subprocess.** No: not a standalone server,
+   just another Python ASGI server.
+
+## Decision
+
+Option 2. `_core.serve(asgi_app, host, port)` accepts any ASGI app — for
+`trpc-py serve` it is `mount(router, ...)`.
+
+Threading and GIL model:
+
+- `trpc_py.serve.serve(router, host=..., port=..., **mount_kwargs)` (Python
+  wrapper): builds the ASGI app, creates an `asyncio` event loop on a
+  dedicated daemon `threading.Thread` (`loop.run_forever()`), then calls
+  `_core.serve(app, loop, host, port)` and blocks until shutdown.
+- Each tokio worker converts the app coroutine with
+  `pyo3-async-runtimes` (`into_future` bound to that loop's `TaskLocals`)
+  and `.await`s it inside tokio — the worker is never parked holding the
+  GIL. Handler concurrency is capped by the single asyncio loop, exactly
+  like uvicorn; the win is Rust doing HTTP parsing, `trpc-core` protocol
+  work, and response serialization off-loop.
+- Request bodies are collected up front (the protocol needs full JSON
+  before dispatch) and fed through a one-shot `receive()`. Response
+  bodies stream: the `send()` callable pushes `http.response.body`
+  chunks into a bounded Rust channel backing the hyper body stream —
+  pull-based backpressure identical to the WSGI pump in ADR 0010, and
+  SSE subscriptions stream natively. Client disconnect closes the
+  channel; the next `send()` fails, which surfaces as disconnect in the
+  app and cancels the generator.
+- Shutdown: `tokio::signal::ctrl_c()` stops the runtime gracefully; the
+  Python main thread stays blocked inside the `_core.serve` call (where
+  Python `KeyboardInterrupt` cannot run anyway), returns to Python on
+  exit, and the wrapper stops the loop thread.
+
+## Consequences
+
+- One dispatch implementation serves all six surfaces (ASGI mount, WSGI,
+  Django, REST, REST-attached, standalone). Standalone cannot drift.
+- New Rust deps land in `crates/trpc-py` only: `hyper`, `http-body-util`,
+  `tokio` (multi-thread), `pyo3-async-runtimes`. Feature-gating them
+  keeps wheel size honest if it ever matters — not needed now.
+- Standalone throughput is bounded by one asyncio loop for handler code,
+  same as every Python ASGI server; HTTP/parse/serialize overhead is
+  Rust-side. The 0.7.0 benchmark compares it honestly against uvicorn.
+- `trpc-py serve` stays a thin CLI: `--app module:router`, `--host`,
+  `--port`, `--production`, forwarded mount kwargs.
