@@ -188,6 +188,17 @@ def http_load(out: Path) -> None:
             "large_payload": ("POST", "/plain/echo"),
         },
     )
+    standalone_port = free_port()
+    servers["trpc-standalone"] = (
+        ["uv", "run", "python", "benchmarks/apps.py", str(standalone_port)],
+        f"http://127.0.0.1:{standalone_port}",
+        {
+            "single_query": ("GET", f"/trpc/greet?input={single_input}"),
+            "batch_10": ("GET", f"/trpc/{batch_paths}?batch=1&input={batch_input}"),
+            "mutation": ("POST", "/trpc/echo"),
+            "large_payload": ("POST", "/trpc/echo"),
+        },
+    )
     servers["node-trpc"] = (
         ["node", "clients/ts-tests/bench/node-reference.mjs", str(node_port)],
         f"http://127.0.0.1:{node_port}",

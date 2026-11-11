@@ -19,6 +19,13 @@
 mod ffi {
     #![allow(unsafe_code)]
 
+    // Kept as `src/serve.rs` (a `#[path]` module cannot reach outside `ffi/`
+    // without a real directory); included inline so its PyO3-macro `unsafe`
+    // stays inside this quarantine.
+    pub(crate) mod serve {
+        include!("serve.rs");
+    }
+
     use pyo3::{
         create_exception,
         exceptions::{PyException, PyTypeError, PyValueError},
@@ -582,6 +589,7 @@ mod ffi {
         m.add_class::<PyWatcher>()?;
         m.add_function(wrap_pyfunction!(parse_request, m)?)?;
         m.add_function(wrap_pyfunction!(build_response, m)?)?;
+        m.add_function(wrap_pyfunction!(serve::serve, m)?)?;
         Ok(())
     }
 

@@ -75,6 +75,12 @@ def parse_request(
     method: str, path: str, query: str, body: bytes | None, limits: Limits
 ) -> ParsedRequest: ...
 def build_response(results: list[CallResult], batched: bool) -> tuple[int, str]: ...
+def serve(app: Any, loop_: Any, host: str, port: int, *, max_body_size: int | None = None) -> None:
+    """Serve an ASGI app on the embedded hyper server until shutdown.
+
+    Blocks (GIL released) until Ctrl-C or until `loop_` stops running; used
+    by `trpc_rs_py.serve.serve`, which owns the loop lifecycle.
+    """
 
 @final
 class SseEncoder:
@@ -122,4 +128,5 @@ __all__ = [
     "__version__",
     "build_response",
     "parse_request",
+    "serve",
 ]

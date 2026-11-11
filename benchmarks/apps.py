@@ -4,11 +4,17 @@ The tRPC app, the plain-JSON baseline and the Node reference serve the same
 procedures with the same wire work. Handlers are deliberately unannotated:
 the Node reference performs no input validation, so the comparison isolates
 protocol and adapter overhead rather than validation cost.
+
+Standalone-server entry: ``uv run python benchmarks/apps.py <port>`` serves
+the same router through ``trpc_rs_py.serve.serve`` (production mode, mounted
+at ``/trpc``), matching the ``trpc-fastapi`` workloads in ``run.py``. The
+harness spawns this as the ``trpc-standalone`` server.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
 from fastapi import FastAPI
@@ -52,3 +58,14 @@ async def plain_batch(input: str) -> JSONResponse:
 @baseline_app.post("/plain/echo")
 async def plain_echo(payload: dict[str, Any]) -> JSONResponse:
     return JSONResponse({"result": {"data": payload["message"]}})
+
+
+def serve_standalone(port: int) -> int:
+    """Run the standalone Rust server for the ``trpc-standalone`` entry."""
+    from trpc_rs_py.serve import serve
+
+    return serve(router, production=True, port=port)
+
+
+if __name__ == "__main__":
+    raise SystemExit(serve_standalone(int(sys.argv[1]) if len(sys.argv) > 1 else 8000))
