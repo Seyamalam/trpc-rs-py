@@ -1,0 +1,55 @@
+# Performance findings
+
+Methodology and reproducibility live in [Benchmarks](benchmarks.md); this page
+records profiling conclusions and what they mean for optimization work. Machine
+numbers drift between runs — read ratios, not absolutes.
+
+## 0.7.0 — standalone transport vs uvicorn
+
+`oha` load run (5s per workload, same router, production mode, Apple M5 Pro):
+
+| Server | Workload | req/s | p50 | p99 |
+|---|---|---:|---:|---:|
+| trpc-standalone | single_query | 15,895 | 0.94 ms | 2.15 ms |
+| trpc-fastapi (uvicorn) | single_query | 11,092 | 1.30 ms | 2.82 ms |
+| plain-fastapi | single_query | 11,937 | 1.32 ms | 1.72 ms |
+| node-trpc | single_query | 32,831 | 0.41 ms | 1.13 ms |
+| trpc-standalone | batch_10 | 9,021 | 1.61 ms | 3.67 ms |
+| trpc-fastapi | batch_10 | 7,791 | 1.88 ms | 3.70 ms |
+| plain-fastapi | batch_10 | 9,786 | 1.62 ms | 1.90 ms |
+| node-trpc | batch_10 | 17,452 | 0.83 ms | 1.90 ms |
+| trpc-standalone | mutation | 14,995 | 1.00 ms | 2.29 ms |
+| trpc-fastapi | mutation | 12,075 | 1.23 ms | 2.64 ms |
+| plain-fastapi | mutation | 11,209 | 1.42 ms | 1.57 ms |
+| node-trpc | mutation | 30,954 | 0.42 ms | 1.23 ms |
+
+Findings:
+
+- **Hyper transport more than pays for protocol overhead.** The standalone
+  server is ~43% faster than trpc-fastapi on single queries and ~24% on
+  mutations — and it *beats bare FastAPI* on both. The per-request cost of the
+  tRPC protocol path is smaller than the uvicorn/httptools overhead it removes.
+- **Batch is the workload where Python dispatch dominates.** Standalone wins
+  ~16% over uvicorn there (less than single query) because per-call dispatch,
+  validation and handler execution — not the HTTP layer — bound throughput.
+  Further gains live in the dispatch path, not the transport.
+- **Node remains ~2x ahead.** Expected: `@trpc/server` does no input
+  validation in this reference app. trpc-standalone roughly halves the gap
+  versus trpc-fastapi (2.96x → 2.07x on single query).
+- **p99 tells the bridge story.** Standalone p99 (~2.1 ms) sits close to
+  plain-fastapi's (~1.7 ms) despite doing more work — the mpsc response bridge
+  keeps tail latency flat; no buffering pile-up at 5s load.
+
+Conclusion: the standalone server is the fastest way to serve a trpc-rs-py
+router and the recommended production path. Remaining headroom is in
+per-call Python dispatch (validation, context construction), not HTTP I/O.
+
+## Deferred
+
+- `py-spy` / `cargo flamegraph` profiles of the dispatch hot path (batch
+  workloads first — see above).
+- WSGI/Django `oha` baselines (deferred from 0.6.0 — the benchmark apps
+  exist for ASGI only; a WSGI runner entry is still needed).
+- SSE and WebSocket throughput under sustained fan-out.
+- Release-run artifacts land in `benchmarks/results/<version>/` from
+  `benchmarks/run.py`; this page summarizes findings, not raw data.

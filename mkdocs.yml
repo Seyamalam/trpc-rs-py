@@ -29,6 +29,7 @@ nav:
   - REST + OpenAPI: rest.md
   - CLI reference: cli.md
   - Benchmarks: benchmarks.md
+  - Performance: performance.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md
   - TypeScript Codegen: codegen.md
