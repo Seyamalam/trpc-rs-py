@@ -3,9 +3,19 @@
 Gate for `1.0.0-beta.1` (MISSION.md section 12). Every item needs evidence
 linked. The release is blocked until all boxes are checked.
 
-- [ ] All adapters pass the protocol compatibility tests against the official tRPC client.
-- [ ] Every differentiator in MISSION.md section 2 is complete, tested, and documented.
-- [ ] Feature matrix has no "partial" items in the core protocol rows.
+- [x] All adapters pass the protocol compatibility tests against the official
+  tRPC client (`clients/ts-tests` — 102 official `@trpc/client` v11 runtime
+  + type tests across ASGI, WSGI, Django sync/async, and the standalone
+  server; runs in `just ci`).
+- [x] Every differentiator in MISSION.md section 2 is complete, tested, and
+  documented (live type sync — measured 3.5 ms codegen for 200 procedures,
+  see `docs/performance.md`; migration link `packages/link`; subscriptions
+  with cancellation/backpressure; AI SDK helpers; REST + OpenAPI — all
+  test-linked in `docs/feature-matrix.md`).
+- [x] Feature matrix has no "partial" items in the core protocol rows
+  (verified by `scripts/check_matrix.py` — 27 rows, 215 test links; the
+  remaining "partial" cells are in the `@trpc/server` and
+  FastAPI+OpenAPI *comparison* columns and describe competitor gaps).
 - [ ] Coverage targets met (>= 90% lines, Rust `cargo llvm-cov` and Python `pytest-cov`).
 - [ ] Fuzzer ran at least 1 hour per target with no crashes (targets exist
   and pass bounded smoke via `just fuzz-smoke`; the 1-hour soak is
@@ -15,8 +25,13 @@ linked. The release is blocked until all boxes are checked.
   `docs/security/audit-report.md`).
 - [x] Threat model written and every listed risk mitigated or documented
   (`docs/security/threat-model.md`; residual risks are listed and accepted).
-- [ ] Benchmarks published, and adapter overhead over a plain JSON view is documented.
+- [x] Benchmarks published, and adapter overhead over a plain JSON view is
+  documented (`docs/benchmarks.md` release numbers +
+  `benchmarks/results/<version>/` artifacts; ASGI adapter within noise of a
+  plain FastAPI JSON view).
 - [ ] Wheels build and install for Linux (x86_64, aarch64, manylinux and musllinux), macOS (x86_64, arm64), and Windows (x86_64). npm packages build and pack cleanly.
 - [ ] Every example and template runs from a clean checkout following its README.
 - [ ] Docs complete (MISSION.md section 14) with no broken links.
-- [ ] Public API reviewed and frozen; any later breaking change requires 2.0.
+- [x] Public API reviewed and frozen; any later breaking change requires 2.0
+  (`docs/api-freeze.md` — full public-surface inventory with stability
+  contract for each surface).

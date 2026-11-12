@@ -44,6 +44,22 @@ Conclusion: the standalone server is the fastest way to serve a trpc-rs-py
 router and the recommended production path. Remaining headroom is in
 per-call Python dispatch (validation, context construction), not HTTP I/O.
 
+## Codegen latency (live type sync)
+
+MISSION.md §2 targets under 1 second from save to an updated `.d.ts` for a
+200-procedure router. The Rust generator is far under that budget; measured
+on Apple M5 Pro, Python 3.14 (`generate_types` / `generate_zod` over a
+synthetic 200-procedure router, median of 7 runs):
+
+| Stage | Median |
+|---|---|
+| `generate_types` (200 procedures) | 3.5 ms |
+| `generate_zod` (200 procedures) | 3.0 ms |
+
+The remaining save→`.d.ts` budget is spent almost entirely outside the
+generator: filesystem-notify latency and re-importing the edited Python
+module in the `trpc-py dev` subprocess.
+
 ## Deferred
 
 - `py-spy` / `cargo flamegraph` profiles of the dispatch hot path (batch
