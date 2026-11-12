@@ -203,6 +203,7 @@ def test_nest_composes_dotted_paths() -> None:
 
     app.nest("posts", posts)
     assert set(app.procedures) == {"posts.by_id", "posts.create"}
+    assert app.procedures["posts.by_id"].path == "posts.by_id"
     assert app.procedures["posts.by_id"].kind is ProcedureKind.QUERY
     assert app.procedures["posts.by_id"].handler is by_id
     assert app.procedures["posts.create"].kind is ProcedureKind.MUTATION
@@ -218,6 +219,7 @@ def test_nested_nest_composes_deeper_paths() -> None:
     mid.nest("sub", leaf)
     app.nest("top", mid)
     assert "top.sub.deep" in app.procedures
+    assert app.procedures["top.sub.deep"].path == "top.sub.deep"
 
 
 def test_nest_empty_prefix_raises() -> None:

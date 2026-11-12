@@ -626,13 +626,15 @@ class Router:
 
             app.nest("posts", posts)
             assert "posts.by_id" in app.procedures
+            assert app.procedures["posts.by_id"].path == "posts.by_id"
             ```
         """
         _validate_name(prefix, what="nest prefix")
         # Snapshot the source entries: nesting a router into itself must not
         # mutate the mapping being iterated.
         for path, procedure in list(other._procedures.items()):
-            self._procedures[f"{prefix}.{path}"] = procedure
+            full_path = f"{prefix}.{path}"
+            self._procedures[full_path] = procedure.__replace__(path=full_path)
 
     @overload
     def query(self, func: Callable[[Unpack[_Ts]], _R], /) -> Callable[[Unpack[_Ts]], _R]: ...

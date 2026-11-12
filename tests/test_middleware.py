@@ -454,7 +454,7 @@ class TestMergedAndNestedRouters:
 
         client = TestClient(mount(app_router))
         assert client.get("/trpc/sub.leaf").json()["result"]["data"] == "leaf"
-        assert hits == ["leaf"]
+        assert hits == ["sub.leaf"]
 
 
 class TestHelpers:
