@@ -39,11 +39,27 @@ a glance.
 - `python-client` — a uvicorn-served router called by
   `trpc_rs_py.client.create_client` (query/mutation/batch/typed error) and
   the generated `AppRouterClient` stub.
-
-Still planned: FastAPI + React (Vite) with `@trpc/react-query`; Flask +
-Next.js; Django + vanilla TypeScript client.
+- `fastapi-react-vite` — FastAPI backend + Vite/React frontend using
+  `@trpc/react-query` hooks typed by the generated `app-router.d.ts`,
+  with CORS allowlisted for the dev origin.
+- `flask-nextjs` — Flask backend + Next.js frontend calling the router
+  server-side from an async server component (`@trpc/client`, no CORS).
+- `django-vanilla-ts` — Django backend + Vite-served vanilla TypeScript
+  page using `@trpc/client` through a same-origin dev proxy.
 
 ## Features
 
-Auth middleware with context, batching, typed errors, Zod form validation,
-error handling, file upload (if supported), Pydantic vs. other schema libraries.
+- `feature-auth-context` — middleware building a request context and
+  procedures reading it (auth-style `ctx`).
+- `feature-batching` — several calls in one `?batch=1` request with
+  ordered per-call envelopes, plus the Python client's `.batch()`.
+- `feature-typed-errors` — declared `TRPCError` subclasses with typed
+  `data` payloads forming a discriminated union in the generated types.
+- `feature-error-handling` — production vs. development error policy:
+  client-facing codes pass through, INTERNAL/unexpected errors redact.
+- `react-zod-form` — a React form validating with Zod schemas generated
+  from the same Pydantic model the server enforces.
+- `feature-pydantic-vs` — the same mutation validated by a Pydantic model
+  vs. hand-rolled `dict` checks; wire behavior and trade-offs compared.
+
+File upload (if supported) is still planned.
