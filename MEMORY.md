@@ -13,6 +13,9 @@
   source of truth — `scripts/sync_docs_site.py` renders it to MDX
   (nav → meta.json, mermaid → `<Mermaid>`, links → `/docs/...`); `ci-docs`
   fails if generated output drifts. `just site` / `just site-dev`.
+  Deployed to Vercel: https://docs-lake-iota-18.vercel.app — redeploy with
+  `cd apps/docs && pnpm dlx vercel --prod` (or connect Git in the dashboard
+  for auto-deploy on push).
 - 0.9.x state (see `docs/production-readiness.md` — 12/12 items checked):
   - Done: §9 examples complete (25 smokes/172 assertions in `just ci`),
     cross-platform wheels (`scripts/wheels.sh`, 7 targets, 6
