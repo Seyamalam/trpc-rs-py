@@ -21,17 +21,27 @@ smoke-tested by the local CI gate via an `examples/<name>/smoke.sh` script.
   `DispatcherMiddleware`.
 - `django-sync` — Django (WSGI) + `trpc_view`/`asgi_view`.
 - `django-async` — Django (ASGI) + `trpc_view_async`/`asgi_view_async`.
-- `standalone-server` — planned (the standalone Rust server).
+- `standalone-server` — `serve()` on the embedded Rust HTTP server
+  (production mode), no Python framework.
 
-Each serves the same router — queries, a mutation, REST + OpenAPI under
-`/api` — so the differences between adapters are visible at a glance.
+The `-basic` examples serve the same router — queries, a mutation, REST +
+OpenAPI under `/api` — so the differences between adapters are visible at
+a glance.
 
 ## Combinations
 
-FastAPI + React (Vite) with `@trpc/react-query`; Flask + Next.js; Django +
-vanilla TypeScript client; shared router module across FastAPI and Flask;
-merged/nested routers; one router serving tRPC and REST + OpenAPI; Python
-server + Python client.
+- `rest-and-trpc` — ONE router mounted twice on one app: tRPC under `/trpc`
+  plus REST + OpenAPI under `/api`.
+- `merged-routers` — sub-routers composed with `merge`/`nest` into
+  `posts.*`, `users.*` and two-level `posts.comments.*` paths.
+- `shared-router` — one router module served by both a FastAPI (`mount`)
+  and a Flask (`mount_wsgi`) app with byte-identical results.
+- `python-client` — a uvicorn-served router called by
+  `trpc_rs_py.client.create_client` (query/mutation/batch/typed error) and
+  the generated `AppRouterClient` stub.
+
+Still planned: FastAPI + React (Vite) with `@trpc/react-query`; Flask +
+Next.js; Django + vanilla TypeScript client.
 
 ## Features
 
