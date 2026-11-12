@@ -23,7 +23,7 @@ While you edit Python, regenerate `app-router.d.ts` on every save:
 
 ```bash
 trpc-py dev --app server:router --out app-router.d.ts \
-    --server "uvicorn server:app --reload"
+    --server "server:app"
 ```
 
 ## Call it

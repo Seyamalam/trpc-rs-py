@@ -37,5 +37,37 @@ the tested limits.
 
 ## Why not FastAPI + OpenAPI codegen?
 
-Planned comparison — see the roadmap in `MISSION.md` section 2 and
-`docs/feature-matrix.md` once the comparison is published.
+Fair question — FastAPI's OpenAPI document plus a TypeScript client
+generator (`openapi-typescript`, Orval, `openapi-generator`) is a real
+workflow, and for pure-REST APIs it is the right one. The differences
+that matter:
+
+- **Static vs live types.** OpenAPI codegen runs on a build step: you
+  regenerate the client, commit it, and hope nobody's backend change
+  drifted from the checked-in types. `trpc-py dev` rewrites the `.d.ts`
+  on every Python save — the type error shows up in your editor, not in
+  CI. See [live type sync](live-type-sync.md).
+- **Request/response only.** OpenAPI has no tRPC subscriptions, no
+  `lastEventId` resume, no batching semantics — streaming endpoints get
+  hand-rolled SSE. Here an `async def` generator *is* a typed
+  subscription over SSE, and client disconnect cancels it. See
+  [subscriptions](subscriptions.md) and [AI streaming](ai-streaming.md).
+- **No typed-error protocol.** OpenAPI models error *documents*; the
+  client sees a status code and an untyped detail body. tRPC's error
+  envelope carries a code end-to-end, and declared errors become a
+  discriminated union in TypeScript. See [typed errors](typed-errors.md).
+- **Generated client vs official client.** OpenAPI generators emit their
+  own fetch wrappers; trpc-rs-py speaks the tRPC v11 wire format, so the
+  official `@trpc/client` and `@trpc/react-query` work unmodified. See
+  [the wire protocol](protocol.md) for what that means byte-for-byte.
+
+And it is not either/or: the same router can serve REST + an OpenAPI 3.1
+document for mobile, partners, and `curl`, so adopting trpc-rs-py is not
+lock-in — see [REST + OpenAPI](rest.md).
+
+**When FastAPI alone wins:** there is no TypeScript client at all
+(public partner API, mobile-only consumers), the OpenAPI ecosystem is
+the point (gateways, contract testing, multi-language codegen), or REST
+*is* the product contract rather than an implementation detail. For a
+side-by-side feature breakdown see the
+[feature matrix](feature-matrix.md).

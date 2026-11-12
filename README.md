@@ -63,6 +63,70 @@ with full types that update live on every Python save.
   Rust core; the Python adapter adds near-zero overhead over a plain JSON view
   ([benchmark results](docs/benchmarks.md)).
 
+## Features
+
+| Feature | One line |
+| --- | --- |
+| Queries, mutations, batching | tRPC v11 wire-compatible — the official `@trpc/client` works unmodified |
+| Subscriptions | `async def` generator → typed SSE stream, `tracked()` ids + `lastEventId` resume |
+| Live type sync | `trpc-py dev` rewrites `app-router.d.ts` on every Python save |
+| Typed errors | declared `TRPCError` subclasses → discriminated union in TypeScript |
+| AI streaming | SSE subscriptions that cancel on disconnect; Vercel AI SDK endpoint helpers |
+| TS codegen | `generate_types(router)` → `AppRouter` `.d.ts`; `TypeError`, never `any` |
+| Zod codegen | `trpc-py codegen zod` → zod v4 input schemas for frontend form validation |
+| REST + OpenAPI | `RestRoute` opt-in serves REST + an OpenAPI 3.1 doc from the same router |
+| Middleware + context | onion-chain middleware, `RequestContext`, auth/CORS/CSRF/rate-limit helpers |
+| Validation | Pydantic v2 input + output validation on every procedure |
+| Standalone server | `trpc-py serve` — Rust (hyper) transport in-process, no uvicorn needed |
+| Migration + Python client | `@trpc-rs-py/link` routes ops by path; `create_client` for Python callers |
+
+Per-adapter status with test evidence lives in the
+[feature matrix](docs/feature-matrix.md).
+
+## Benchmarks
+
+Latest run (0.8.0, Apple M5 Pro): the standalone Rust server leads plain
+FastAPI on writes and large bodies — ~1.4–2.2x across runs, 4,637 vs
+2,132 req/s on the 100 KB payload in this one — while the FastAPI mount
+stays ~1.8x a plain JSON view on single queries. The official Node
+`@trpc/server` still leads on small requests (no input validation in the
+reference app).
+
+![Requests per second by workload and server](docs/benchmarks/latest-http-rps.svg)
+
+Full tables, latency percentiles, and methodology:
+[docs/benchmarks.md](docs/benchmarks.md).
+
+## Why not FastAPI + OpenAPI codegen?
+
+FastAPI's OpenAPI output plus a client generator (`openapi-typescript`,
+Orval, `openapi-generator`) is a legitimate setup — and for pure-REST
+APIs it is the right one. Where it falls short for a TypeScript
+frontend:
+
+- **Static types.** Client types regenerate on a build step and drift
+  silently when the backend moves. `trpc-py dev` rewrites the `.d.ts` on
+  every Python save, so a breaking change is a red squiggle, not a CI
+  surprise.
+- **Request/response only.** No tRPC subscriptions, `lastEventId`
+  resume, or call batching — SSE gets hand-rolled per endpoint.
+- **No typed errors.** The client sees an HTTP status and an untyped
+  detail body; tRPC's error envelope carries a code end-to-end, and
+  declared errors arrive as a discriminated union.
+- **A generated client, not the official one.** OpenAPI tools emit their
+  own fetch wrappers. trpc-rs-py speaks the tRPC v11 wire format, so
+  `@trpc/client` and `@trpc/react-query` work unmodified — including
+  `subscribe()` and `tracked` event ids.
+
+And it is not a lock-in: opt any procedure into `RestRoute` and the same
+router also serves REST plus an OpenAPI 3.1 document for non-TypeScript
+clients.
+
+**Stick with FastAPI alone when** there is no TypeScript consumer
+(mobile-only, public partner API), the OpenAPI ecosystem is the point
+(gateways, contract testing, multi-language codegen), or REST is the
+product contract rather than an implementation detail.
+
 ## Development
 
 ```sh

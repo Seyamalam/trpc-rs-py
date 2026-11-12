@@ -1,0 +1,183 @@
+# AI streaming
+
+LLM responses need three things from a transport: tokens to the client
+as they are produced, generation that *stops* when the client leaves,
+and resume when the connection drops. trpc-rs-py has two paths, both
+built on `async def` generators:
+
+- **tRPC subscriptions** — the typed path: the stream is a procedure in
+  your `AppRouter`, with `tracked` event ids and `lastEventId` resume.
+- **The Vercel AI SDK endpoint** — `ai_sdk_endpoint` serves the `useChat`
+  wire protocol directly, for frontends built on the AI SDK. See
+  [Vercel AI SDK](ai-sdk.md) for that page; this one covers the shared
+  streaming model and the subscription path.
+
+## Subscriptions: the typed path
+
+A subscription handler is an async generator — each `yield` becomes one
+SSE data event consumed by the official `httpSubscriptionLink`:
+
+```python
+from collections.abc import AsyncIterator
+
+import openai
+from pydantic import BaseModel
+
+from trpc_rs_py import Router, Tracked, tracked
+
+
+class Token(BaseModel):
+    text: str
+    done: bool = False
+
+
+openai_client = openai.AsyncOpenAI()
+router = Router()
+
+
+@router.subscription
+async def chat(prompt: str) -> AsyncIterator[Tracked[Token]]:
+    """Stream OpenAI tokens; each is a resumable tracked SSE event."""
+    stream = await openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        stream=True,
+    )
+    seq = 0
+    async for chunk in stream:
+        if not chunk.choices:
+            continue  # usage-only final chunk
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield tracked(str(seq), Token(text=delta))
+            seq += 1
+    yield tracked(str(seq), Token(text="", done=True))
+```
+
+```ts
+const sub = trpc.chat.subscribe(
+  { prompt: "explain SSE" },
+  {
+    onData: ({ id, data }) => {
+      appendToken(data.text); // data is Token — fully typed
+      if (data.done) sub.unsubscribe();
+    },
+  },
+);
+```
+
+`Tracked[Token]` yields surface on the client as `{ id, data }` items;
+the generated type is `AsyncIterable<{ id: string; data: Token }>`.
+
+### Cancellation kills the upstream call
+
+When the client disconnects, the adapter cancels the generator's pending
+`__anext__` and `aclose()`s it — `GeneratorExit` unwinds the `async for`,
+releasing the OpenAI stream and its underlying HTTP response, so the
+in-flight completion stops. No tokens (or dollars) are produced after
+the caller leaves. Backpressure is pull-based: the next chunk is only awaited after
+the previous frame was accepted by `send`, so a slow client never grows
+a buffer.
+
+### `tracked` events and `lastEventId` resume
+
+`tracked(event_id, data)` rides as the SSE `id:` field — the same
+mechanism as `tracked()` in `@trpc/server`. On reconnect the client
+returns its last seen id, delivered to the handler through the
+`last-event-id` header, the `lastEventId` input member, or a declared
+parameter (`lastEventId: str | None = None`) — which stays protocol
+metadata and never appears in the generated input type. Use it to
+re-query history or fast-forward the source:
+
+```python
+@router.subscription
+async def chat(room: str, lastEventId: str | None = None) -> AsyncIterator[Tracked[Token]]:
+    async for token in resume_tokens(room, after=lastEventId):
+        yield tracked(token.seq, Token(text=token.text))
+```
+
+Ids must not contain newline, carriage return, or NUL. A bare `yield`
+after tracked yields emits an empty `id:` plus `restore-id`, matching
+the official client's resume tracking. Keep-alives
+(`mount(..., sse_ping_interval=30)`) and the `max_sse_event_size` frame
+cap are covered in [subscriptions](subscriptions.md).
+
+## Chunk helpers for provider stream shapes
+
+`trpc_rs_py.streaming` ships helpers that map real provider streams to
+AI SDK v5 UI-message-stream chunk dicts — plain dicts, so they work in
+subscriptions *and* in `ai_sdk_endpoint` factories:
+
+| Helper | Signature | Emits |
+| --- | --- | --- |
+| `ai_text_stream` | `(source, *, text_id=None)` | `text-start` → one `text-delta` per non-empty delta → `text-end`, under one block id |
+| `ai_message_stream` | `(parts, *, message_id=None, error_text=str)` | `start` → parts → `finish`, or an `error` chunk if `parts` raises |
+| `ai_data_part` | `(name, data, *, part_id=None, transient=False)` | one `{"type": "data-<name>", "data": ...}` custom part dict |
+
+`ai_text_stream`'s source may yield plain `str` deltas, **OpenAI**
+`ChatCompletionChunk` objects or dicts (`choices[0].delta.content`), or
+**Anthropic** `content_block_delta` events (`delta.text`); usage, role,
+and ping chunks are skipped. One call owns one text block — concatenate
+calls for several. `ai_data_part` carries arbitrary structured data
+(usage summaries, tool progress) alongside the text: `id`-carrying parts
+reconcile client-side, `transient=True` parts reach `onData` without
+joining the message.
+
+## The Vercel AI SDK path
+
+`useChat` cannot read tRPC's SSE framing, so for AI SDK frontends serve
+the helpers through `ai_sdk_endpoint` — a plain ASGI app speaking the
+UI message stream protocol byte-for-byte, headers included:
+
+```python
+from fastapi import FastAPI
+
+from trpc_rs_py.streaming import (
+    ai_message_stream,
+    ai_sdk_endpoint,
+    ai_text_stream,
+)
+
+
+async def chat(body, scope):
+    messages = body["messages"] if body else []
+    stream = await openai_client.chat.completions.create(
+        model="gpt-4o-mini", messages=messages, stream=True,
+    )
+    return ai_message_stream(ai_text_stream(stream))
+
+
+app = FastAPI()
+app.mount("/api/chat", ai_sdk_endpoint(chat, keep_alive_interval=15))
+```
+
+```ts
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+
+const { messages, sendMessage, status } = useChat({
+  transport: new DefaultChatTransport({ api: "/api/chat" }),
+});
+```
+
+That is the entire frontend — no custom transport code. Cancellation,
+backpressure, keep-alive, and mid-stream error semantics mirror the
+subscription transport; options (`max_body_size`, `keep_alive_interval`,
+`error_text`) and limits are in [Vercel AI SDK](ai-sdk.md).
+
+## Choosing a transport
+
+- **Subscription** when the stream is part of your typed API: generated
+  `AppRouter` types, `tracked` resume, middleware/context. The cost on
+  AI SDK frontends is a custom `ChatTransport` wrapping
+  `trpc.chat.subscribe(...)` (~30–50 lines — see
+  [ai-sdk.md](ai-sdk.md#through-the-router-alternative)).
+- **`ai_sdk_endpoint`** when `useChat`/`useCompletion` should work
+  unmodified. The cost: it sits outside the router — no generated types,
+  error envelope, middleware, or `lastEventId` mechanism; wrap the ASGI
+  app for auth.
+
+Both compose with the same helpers, so switching transports later does
+not rewrite the stream logic. The runnable `examples/ai-chat/` shows a
+`tracked` token stream plus REST output from one router — with a fake
+LLM, so it needs no API key.

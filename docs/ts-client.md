@@ -1,0 +1,173 @@
+# TypeScript client
+
+The generated `app-router.d.ts` feeds the **official `@trpc/client`
+v11** — vanilla, proxy, or `@trpc/react-query`. Everything on this page
+runs against live Python servers in `clients/ts-tests`.
+
+## Setup
+
+```bash
+npm install @trpc/client @trpc/server
+trpc-py codegen ts --app server:router --out src/app-router.d.ts
+```
+
+`@trpc/server` is a type-only dependency — the generated file imports
+from `@trpc/server/unstable-core-do-not-import`, the officially
+documented inference module. Regenerate on every Python save with
+[`trpc-py dev`](cli.md) instead of the one-off `codegen ts`.
+
+The generated module exports `AppRouter` (the router type),
+`AppRouterRecord` / `ProcedureMap`, `RouterInputs` / `RouterOutputs`
+(input/output types by path or per-procedure), `AppRouterErrorShape`
+(the declared-error union), plus one interface per procedure and per
+Pydantic model. Never add a transformer such as `superjson` — the server
+speaks identity JSON; `datetime` arrives as an ISO string, as typed.
+
+## Vanilla client
+
+```ts
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import type { AppRouter } from "./app-router";
+
+const client = createTRPCClient<AppRouter>({
+  links: [httpBatchLink({ url: "http://127.0.0.1:8000/trpc" })],
+});
+
+const hello = await client.greeting.query({ name: "Ada" });   // string
+const post = await client.create_post.mutate({ title: "hi" }); // Post
+```
+
+Queries use `.query(input)`, mutations `.mutate(input)`, subscriptions
+`.subscribe(input, callbacks)` — the wrong verb, a wrong input shape, or
+an unknown path is a compile-time error.
+
+## Links and batching
+
+`httpBatchLink` batches automatically: concurrent calls of the same
+operation type go out as a single `?batch=1` HTTP request, in order.
+Queries and mutations batch *separately* — the official contract — so
+one query + one mutation is two requests. Useful options: `headers`
+(mapping or resolver) for auth tokens, `methodOverride: "POST"` to send
+queries as POST too, `maxURLLength` / `maxItems` to bound batch width.
+
+Subscriptions travel SSE, not the batch link. Combine both with
+`splitLink`:
+
+```ts
+import { httpBatchLink, httpSubscriptionLink, splitLink } from "@trpc/client";
+
+const client = createTRPCClient<AppRouter>({
+  links: [
+    splitLink({
+      condition: (op) => op.type === "subscription",
+      true: httpSubscriptionLink({ url: "http://127.0.0.1:8000/trpc" }),
+      false: httpBatchLink({ url: "http://127.0.0.1:8000/trpc" }),
+    }),
+  ],
+});
+```
+
+Browsers have `EventSource` built in; on Node pass a ponyfill —
+`httpSubscriptionLink({ url, EventSource })` with `EventSource`
+imported from the `eventsource` package.
+
+## Subscriptions
+
+```ts
+const sub = client.ticks.subscribe(undefined, {
+  onData: (event) => console.log(event.id, event.data), // tracked yields: {id, data}
+  onError: (err) => console.error(err),
+});
+sub.unsubscribe(); // cancels the generator server-side
+```
+
+Or async-iterate the same call:
+`for await (const event of client.ticks.subscribe(undefined))`.
+
+**Resume is automatic.** On reconnect the client sends the last seen
+event id as `lastEventId`; handlers declaring a `lastEventId` parameter
+resume from it (see [subscriptions](subscriptions.md)).
+
+## React Query
+
+```bash
+npm install @trpc/react-query @tanstack/react-query
+```
+
+```ts
+import { createTRPCReact } from "@trpc/react-query";
+import type { AppRouter } from "./app-router";
+
+export const trpc = createTRPCReact<AppRouter>();
+```
+
+```tsx
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { httpBatchLink } from "@trpc/client";
+import { trpc } from "./trpc";
+
+const queryClient = new QueryClient();
+const trpcClient = trpc.createClient({
+  links: [httpBatchLink({ url: "http://127.0.0.1:8000/trpc" })],
+});
+
+root.render(
+  <trpc.Provider client={trpcClient} queryClient={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </trpc.Provider>,
+);
+```
+
+Hooks are typed off `AppRouter`:
+
+```ts
+const user = trpc.user_by_id.useQuery({ user_id: 1 });       // data?: User
+const createUser = trpc.create_user.useMutation();
+createUser.mutate({ user: { name: "Ada", age: 36 } });
+// `trpc.useUtils()` exposes per-procedure invalidate/refetch helpers.
+```
+
+`useSubscription` (needs the `splitLink` wiring above) reports
+`{ status, data, error, reset }` with `status` one of
+`"idle" | "connecting" | "pending" | "error"`. Pass `skipToken` from
+`@tanstack/react-query` as the input to keep it disabled (`enabled` is
+deprecated):
+
+```ts
+const sub = trpc.chat.useSubscription(
+  { room: "lobby" },
+  {
+    onData: (event) => console.log(event.id, event.data),
+    onError: (err) => console.error(err),
+  },
+);
+```
+
+## Typed errors
+
+Failures reject with `TRPCClientError`. Errors declared on the Python
+side via `errors=[...]` narrow on `error.data.code` — payload fields are
+typed:
+
+```ts
+import { isTRPCClientError } from "@trpc/client";
+
+try {
+  await client.post_by_id_or_fail.query({ post_id: 7 });
+} catch (error) {
+  if (!isTRPCClientError<AppRouter>(error)) throw error;
+  switch (error.data?.code) {
+    case "NOT_FOUND":
+      // typed payload fields plus narrowed httpStatus (404)
+      console.log(error.data.post_id, error.data.httpStatus);
+      break;
+    default:
+      break; // undeclared codes carry the default error shape
+  }
+}
+```
+
+`error.data.path` names the failed procedure when known. See
+[typed errors](typed-errors.md) for declaring them in Python.

@@ -26,8 +26,20 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Getting started: getting-started.md
+  - Core concepts: concepts.md
+  - Starter template: starter.md
+  - Guides:
+      - FastAPI: guides/fastapi.md
+      - Starlette: guides/starlette.md
+      - Flask: guides/flask.md
+      - Django: guides/django.md
+      - TypeScript client: ts-client.md
   - Framework Adapters: adapters.md
   - Architecture: architecture.md
+  - Live type sync: live-type-sync.md
+  - AI streaming: ai-streaming.md
+  - Zod codegen: zod-codegen.md
   - Wire Protocol: protocol.md
   - Subscriptions: subscriptions.md
   - Vercel AI SDK: ai-sdk.md
@@ -46,6 +58,7 @@ nav:
   - CLI reference: cli.md
   - API reference: api-reference.md
   - Deployment: deployment.md
+  - Cross-platform wheels: wheels.md
   - Troubleshooting: troubleshooting.md
   - Versioning: versioning.md
   - API freeze: api-freeze.md
