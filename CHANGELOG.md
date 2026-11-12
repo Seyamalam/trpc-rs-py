@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.1] - 2026-11-12
+
+First beta. The public API is now frozen under `docs/api-freeze.md` — changes
+to listed symbols require a deprecation cycle through the 1.0.0 release. All
+twelve `docs/production-readiness.md` items are verified: official-client
+protocol compatibility, live type sync, subscriptions, streaming helpers,
+security limits/audits, a one-hour-per-target fuzz soak (~424M executions, zero
+crashes), 93% Python / 90% Rust shipped-code coverage, cross-platform abi3
+wheels (CPython 3.10–3.14), and 25 example smoke tests gated in `just ci`.
+
+No code changes since 0.9.0; this tag marks the API freeze point.
+
 ## [0.9.0] - 2026-11-12
 
 ### Fixed

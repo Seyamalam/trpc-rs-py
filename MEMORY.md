@@ -7,7 +7,7 @@
 
 - Version: **0.9.0 released** (`v0.9.0` tag; 8 platform wheels + sdist on PyPI);
   **1.0.0-beta.1 is the next milestone — all 12 production-readiness items are checked.**
-- 0.9.x state (see `docs/production-readiness.md` — 10/11 items checked):
+- 0.9.x state (see `docs/production-readiness.md` — 12/12 items checked):
   - Done: §9 examples complete (25 smokes/172 assertions in `just ci`),
     cross-platform wheels (`scripts/wheels.sh`, 7 targets, 6
     install-verified, abi3 = CPython 3.10–3.14), Python coverage 93%,

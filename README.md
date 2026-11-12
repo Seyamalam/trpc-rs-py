@@ -34,7 +34,7 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 
 ![Live type sync — saving `server.py` regenerates `app-router.d.ts`](live-types.gif)
 
-> **Status: 0.8.0 released; 0.9.x release hardening toward `1.0.0-beta`.**
+> **Status: `1.0.0-beta.1` released — public API frozen; wheels for Linux, macOS, and Windows on PyPI.**
 > Queries, mutations, batching, SSE subscriptions, live type sync
 > (`trpc-py dev`), typed errors, AI streaming helpers, REST + OpenAPI
 > output, CORS/CSRF/rate-limit/auth helpers, a standalone server
