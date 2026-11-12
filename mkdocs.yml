@@ -51,6 +51,7 @@ nav:
   - API freeze: api-freeze.md
   - Benchmarks: benchmarks.md
   - Performance: performance.md
+  - Coverage: coverage.md
   - Feature Matrix: feature-matrix.md
   - Validation: validation.md
   - TypeScript Codegen: codegen.md
