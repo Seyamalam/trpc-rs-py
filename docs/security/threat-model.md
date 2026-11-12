@@ -70,7 +70,7 @@ Trust boundaries:
 
 | Attack | Mitigation |
 | --- | --- |
-| Stack traces / internals in errors | `production=True` (or `TRPC_PY_PRODUCTION=1`) produces fixed-shape envelopes: declared `TRPCError`s pass their own message; everything else becomes `INTERNAL_SERVER_ERROR` with no internals. Tested per adapter and on the standalone server. |
+| Stack traces / internals in errors | `production=True` (or `TRPC_RS_PY_PRODUCTION=1`) produces fixed-shape envelopes: declared `TRPCError`s pass their own message; everything else becomes `INTERNAL_SERVER_ERROR` with no internals. Tested per adapter and on the standalone server. |
 | Schema/endpoint enumeration | `/trpc/panel` and its `/panel/schema` endpoint are development-only by default and production-disabled unless explicitly enabled. |
 | Dev server exposure | `trpc-py dev` refuses to run under production mode. |
 | Header leakage | No response carries request headers; `RequestContext` is process-local. |

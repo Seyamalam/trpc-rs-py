@@ -9,6 +9,21 @@ theme:
     - content.code.copy
     - navigation.sections
 
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
 nav:
   - Home: index.md
   - Framework Adapters: adapters.md
@@ -29,6 +44,11 @@ nav:
   - Migrating from Node: migration.md
   - REST + OpenAPI: rest.md
   - CLI reference: cli.md
+  - API reference: api-reference.md
+  - Deployment: deployment.md
+  - Troubleshooting: troubleshooting.md
+  - Versioning: versioning.md
+  - API freeze: api-freeze.md
   - Benchmarks: benchmarks.md
   - Performance: performance.md
   - Feature Matrix: feature-matrix.md

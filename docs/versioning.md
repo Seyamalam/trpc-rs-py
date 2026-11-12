@@ -1,0 +1,59 @@
+# Versioning & releases
+
+trpc-rs-py follows [SemVer](https://semver.org) with the usual 0.x caveat:
+**while the major version is 0, the minor version is the breaking-change
+slot** — new features and breaking changes bump the minor, fixes bump the
+patch.
+
+## Single source of truth
+
+`version` in the workspace `Cargo.toml` is the only place a version is
+written:
+
+* `pyproject.toml` uses `dynamic = ["version"]`, so maturin reads the
+  Cargo version. Maturin converts pre-release versions to PEP 440
+  (`1.0.0-beta.1` → `1.0.0b1`).
+* The npm packages (`packages/`) version in lockstep — the release script
+  stamps the same version everywhere.
+* `trpc_rs_py.__version__` comes from the installed package metadata.
+
+## Release flow
+
+`scripts/release.sh` performs a release in one step:
+
+1. Bump `Cargo.toml` and the npm packages to the new version.
+2. Verify `CHANGELOG.md` (Keep a Changelog format) has an entry.
+3. Run the full local CI gate (`just ci`) — a release never ships red.
+4. Build the Python wheels and npm packages.
+5. Commit `chore(release): vX.Y.Z`, create an annotated git tag `vX.Y.Z`,
+   and push.
+
+## Stability policy
+
+* **0.x**: minor bump for features *or* breaking changes, patch for fixes.
+  Breaking changes are still called out in `CHANGELOG.md` and, where the
+  surface is large, get an ADR in `docs/decisions/`.
+* **1.0.0-beta**: only after every item in
+  [production-readiness.md](production-readiness.md) is checked, then
+  `1.0.0-beta.N` → `1.0.0-rc.N` → `1.0.0`.
+* Once 1.0 lands: breaking changes require a new major. Until then the
+  public API is reviewed and effectively frozen at each beta.
+
+## Deprecation policy
+
+Because 0.x minors may break, deprecations are still handled deliberately:
+
+* A deprecated symbol keeps working for at least **one minor release**
+  after the deprecation is announced, and the announcement lands in
+  `CHANGELOG.md` under **Deprecated**.
+* Deprecations use `warnings.warn(..., DeprecationWarning)` (or a docstring
+  note where warnings would be noisy) so they are visible but not fatal.
+* Removal is itself a changelog entry, made only after the grace period —
+  in practice, never sooner than the next minor.
+
+## Changelog
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com):
+`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security` sections
+per release. Every user-visible change in a release gets an entry; the
+release script fails if the changelog wasn't touched.

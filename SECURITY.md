@@ -39,7 +39,7 @@ documented as dev-only and production-disabled.
 
 ## Hardening checklist for deployments
 
-- Run with `production=True` (or `TRPC_PY_PRODUCTION=1`) — fixed error
+- Run with `production=True` (or `TRPC_RS_PY_PRODUCTION=1`) — fixed error
   envelopes, no stack traces, panel and dev tooling disabled.
 - Keep the default `Limits` or set them tighter for your workload; see
   `docs/limits.md` and `docs/security/threat-model.md`.
