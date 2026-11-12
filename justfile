@@ -82,6 +82,11 @@ release-check: ci
     bash scripts/audit.sh
     @echo "release-check: cross-platform wheels land in 0.9.x (see MISSION.md roadmap)"
 
+# Cross-platform wheel matrix (MISSION.md section 12): builds all shippable
+# targets into dist/wheels/ and verifies installs; see docs/wheels.md.
+wheels:
+    ./scripts/wheels.sh
+
 # Individual pieces for quick iteration.
 fmt:
     cargo fmt --all
