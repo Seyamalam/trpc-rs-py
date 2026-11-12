@@ -1,0 +1,36 @@
+---
+title: "ADR 0002: JSON library"
+description: "Status: Accepted Date: 2026-11-08"
+---
+
+Status: Accepted
+Date: 2026-11-08
+
+## Context
+
+The Rust core parses and serializes every request and response body. JSON
+performance is on the hot path (MISSION.md section 6). Candidates:
+`serde_json`, `simd-json`, `sonic-rs`.
+
+## Options
+
+1. **serde_json** — the default; mature, portable, great serde integration.
+   Single-threaded parsing performance is good but not the fastest available.
+2. **simd-json** — SIMD-accelerated; requires mutable buffers, has a different
+   `Value` type that needs conversion shims, portability caveats on some targets.
+3. **sonic-rs** — fast, serde-compatible API, but Linux/x86-focused; weaker
+   support for the aarch64 and Windows wheel targets we ship.
+
+## Decision
+
+Use **serde_json** for milestone 0.1.0 and keep the choice isolated: all
+parsing/serialization goes through a small internal module so a swap is a
+one-file change. Revisit with criterion benchmarks once the protocol paths are
+complete (0.2.0); if a SIMD parser wins meaningfully on the supported wheel
+targets, switch and update this ADR with the numbers.
+
+## Consequences
+
+- No conversion shims or portability risk now.
+- The decision must be re-evaluated with published benchmark numbers, not taste.
+- Code must not depend on serde_json internals outside the isolation module.

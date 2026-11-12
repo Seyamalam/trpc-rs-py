@@ -1,0 +1,112 @@
+---
+title: "Fuzzing the protocol parser"
+description: "The tRPC wire boundary \u2014 query strings, request bodies, SSE fields \u2014 is attacker-controlled bytes end to end (see Threat model, T1/T2). cargo-fuzz (libFuzzer..."
+---
+
+The tRPC wire boundary — query strings, request bodies, SSE fields — is
+attacker-controlled bytes end to end (see [Threat model](/docs/security/threat-model), T1/T2).
+`cargo-fuzz` (libFuzzer) exercises the `trpc-core` parser continuously, per
+MISSION.md §7 and the §12 release checklist ("fuzzer ran at least 1 hour per
+target with no crashes").
+
+## Layout
+
+`fuzz/` is a standalone cargo-fuzz crate — deliberately **not** a workspace
+member, because the instrumented build requires nightly while the workspace is
+pinned to stable 1.96.0 (`rust-toolchain.toml`).
+
+```
+fuzz/
+  Cargo.toml            # package trpc-core-fuzz, [workspace] detaches from root
+  src/lib.rs            # shared input-shaping helpers (limits, fields, text)
+  fuzz_targets/         # one libFuzzer entry point per file
+  seeds/<target>/       # committed seed inputs (wire-realistic shapes)
+  corpus/<target>/      # gitignored working corpus grown by runs
+  artifacts/<target>/   # gitignored crash reproducers
+```
+
+## Targets
+
+All targets share a byte-level input layout: the first 4 bytes drive
+`Limits` (even first byte → production defaults; odd → fuzzed `max_body_size`/
+`max_batch_size`/`max_json_depth`), and the rest is split into fields on
+`0x00`. See `fuzz/src/lib.rs` for the shaping helpers.
+
+| Target | Attack surface |
+| --- | --- |
+| `parse_get_query` | GET path + query string: `input=` percent-decoding (`+`, truncated/invalid escapes, non-UTF-8), `batch=1`, path charset/emptiness, size limits; parsed calls are routed and wrapped in `build_response` so envelope serialization sees fuzzed JSON. |
+| `parse_post_body` | POST path + query + body: declared `Content-Length` vs actual bytes (honest, absent, and lying modes), JSON parse/depth errors, batched POST input objects. |
+| `parse_batch` | Forced `batch=1` over GET (percent-encoded input dict) and POST (raw body dict): numeric key validation, missing/sparse indexes, out-of-range indexes, comma-joined path lists. |
+| `sse_encode` | Input-derived SSE fields: fuzzed `lastEventId` resume ids, tracked event ids, frame `event`/`data`/`id` text — hunting newline/NUL injection that could split frames; also fuzzed error messages through `serialized_error`. |
+
+## Running
+
+Requires a nightly toolchain and cargo-fuzz:
+
+```bash
+rustup toolchain install nightly
+cargo install cargo-fuzz
+```
+
+Run a single target (bounded):
+
+```bash
+cargo +nightly fuzz run parse_get_query -- -max_total_time=60
+```
+
+Run the full bounded suite — this is exactly what the release gate does:
+
+```bash
+just fuzz-smoke 60
+```
+
+For deeper sessions, raise the time budget; the corpus in `fuzz/corpus/`
+persists between runs so coverage accumulates. Pass the committed seeds
+explicitly to prime a fresh corpus:
+
+```bash
+cargo +nightly fuzz run parse_batch fuzz/corpus/parse_batch fuzz/seeds/parse_batch \
+    -- -max_total_time=600
+```
+
+## Release-gate integration
+
+`just release-check` runs `just fuzz-smoke 60` after the full CI gate and
+benchmarks — a 60-second bounded run per target (4 minutes total). Fuzzing is
+**not** part of `ci`/`ci-fast`; instrumentation is too slow and too noisy for
+the per-commit gate.
+
+If a target crashes, the reproducer is written to
+`fuzz/artifacts/<target>/`. Reproduce with:
+
+```bash
+cargo +nightly fuzz run <target> fuzz/artifacts/<target>/<crash-file>
+```
+
+Minimize before reporting: `cargo +nightly fuzz tmin <target> <crash-file>`.
+
+## Sanitizers and platform notes
+
+cargo-fuzz builds the targets with AddressSanitizer via the nightly
+`-Zsanitizer` machinery, so heap errors and UB would abort the run even
+without a Rust-level panic. A clean run means no panic, no sanitizer report,
+and no timeout within the bound. The §12 checklist requires 1 hour per target
+before `1.0.0-beta.1`; run `just fuzz-smoke 3600` and confirm
+`fuzz/artifacts/` is empty.
+
+## 1-hour soak result — 2026-11-12 ✅
+
+All four targets ran `cargo fuzz run … -max_total_time=3600` in parallel
+against the committed corpora+seeds. Every run ended `DONE`, exit 0, and
+`fuzz/artifacts/` contains no crash reproducers.
+
+| Target | Executions | Corpus after |
+|---|---|---|
+| `parse_get_query` | 161,055,397 | 1723 files |
+| `parse_post_body` | 147,253,378 | 1710 files |
+| `parse_batch` | 92,609,832 | 1752 files |
+| `sse_encode` | 23,455,916 | 445 files |
+| **Total** | **~424 million** | — |
+
+Raw logs: `/tmp/soak-<target>.log` (ephemeral; regenerate with
+`just fuzz-smoke 3600`).

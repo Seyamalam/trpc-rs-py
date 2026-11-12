@@ -1,0 +1,79 @@
+---
+title: "ADR 0012: Vercel AI SDK transport"
+description: "Status: Accepted Date: 2026-11-10"
+---
+
+Status: Accepted
+Date: 2026-11-10
+
+## Context
+
+MISSION section 2.3 requires compatibility with the Vercel AI SDK on the
+frontend (`useChat`). AI SDK v5 consumes a "UI message stream": an SSE
+response (`text/event-stream`, one JSON chunk object per `data:` line,
+`data: [DONE]` terminator) sent with the
+`x-vercel-ai-ui-message-stream: v1` header, plus optional `: keep-alive`
+comments. Chunk types cover `start`/`finish`/`error`, id-scoped
+`text-start`/`text-delta`/`text-end` blocks, `reasoning-*`, `tool-*`, and
+custom `data-*` parts. `useChat`'s `DefaultChatTransport` POSTs
+`{"messages": [...]}` and consumes exactly this contract — it cannot parse
+tRPC's SSE framing (`connected`, `data` + `id:`, `return`).
+
+## Options
+
+1. **A dedicated non-tRPC endpoint** serving the stream directly — a plain
+   ASGI app beside the router emitting the protocol byte-for-byte. This is
+   the contract `DefaultChatTransport` expects: the frontend needs zero
+   custom code beyond `api: "/api/chat"`. Cost: the endpoint lives outside
+   the tRPC router — no generated types, no tRPC error envelope, no
+   `tracked` resume (the protocol has no `lastEventId` mechanism anyway).
+2. **Helpers emitting UI-message chunks through a tRPC subscription.**
+   Stays typed end-to-end and `tracked` resume works, but `useChat` still
+   cannot consume it: every user must write a custom `ChatTransport` in
+   TypeScript that wraps `trpc.subscribe`, unwraps the `{id, data}`
+   envelope, and feeds chunks to the stream reader — roughly 30–50 lines
+   before anything renders. The chat path then hand-parses payloads in a
+   bespoke transport, which quietly discards most of the typing benefit
+   that motivated staying inside the router.
+
+## Decision
+
+Option 1 as the first-class path, with the Python surface shared either
+way. `trpc_rs_py.streaming` gains:
+
+- `ai_text_stream(source, text_id=...)` — maps `str` deltas,
+  OpenAI `ChatCompletionChunk`-shaped (`choices[0].delta.content`), and
+  Anthropic `content_block_delta`-shaped (`delta.text`) sources to
+  `text-start`/`text-delta`/`text-end` chunks under one block id; other
+  chunk shapes are skipped.
+- `ai_message_stream(parts, message_id=..., error_text=str)` — the message
+  envelope: `start` → parts → `finish`, or `error` instead of `finish`
+  when `parts` raises; cancellation re-raises.
+- `ai_data_part(name, data, part_id=..., transient=...)` — `data-*` custom
+  part builder.
+- `ai_sdk_endpoint(factory, ...)` — a plain ASGI app: protocol headers,
+  `data: {json}` frames, `[DONE]` terminator, optional `: stream-open`/
+  `: keep-alive` comments (`keep_alive_interval`, mirroring the official
+  `keepAliveMs`), GET/POST with JSON-body decoding. Disconnect cancels the
+  pending `__anext__` and `aclose()`s the iterable, and backpressure stays
+  pull-based — the same transport semantics as subscriptions (ADR 0007),
+  reimplemented locally because the wire format differs.
+
+Generated ids are process-sequential (`msg-N`, `text-N`) from an
+`itertools.count`; callers pass explicit ids for restart stability.
+
+## Consequences
+
+- A `useChat` user adds one `app.mount("/api/chat", ai_sdk_endpoint(fn))`
+  line and writes no frontend transport code — the least custom TS of the
+  two options, matching the "drop-in compatibility" bar.
+- Option 2 stays supported manually: yield the same chunk dicts from a
+  subscription (optionally `tracked`-wrapped) and write the client-side
+  transport; docs show it honestly as the resumable variant.
+- The endpoint is outside the router: auth is the app's ASGI concern (the
+  factory receives the raw `scope`), errors ride as `error` chunks — or a
+  JSON 4xx/5xx before streaming — and `tracked`/codegen do not apply.
+- `error_text` is the redaction point for `errorText`; production
+  deployments pass a fixed mapper.
+- Helpers only shape events; the endpoint only frames them — no tRPC
+  protocol surface changes, and `asgi.py`/`router.py` are untouched.

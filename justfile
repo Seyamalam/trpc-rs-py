@@ -57,6 +57,20 @@ ci-docs:
     cd packages/link && pnpm run docs
     uv run python scripts/check_matrix.py
     uv run python scripts/test_doc_snippets.py
+    uv run python scripts/sync_docs_site.py
+    # apps/docs/content is generated — it must be committed in sync.
+    test -z "$(git status --porcelain -- apps/docs/content apps/docs/public)" \
+        || (echo "docs site out of sync — run scripts/sync_docs_site.py and commit" && exit 1)
+
+# Docs site (apps/docs): Fumadocs app. Content is generated from docs/ —
+# edit docs/, never apps/docs/content. Build/sync:
+site:
+    uv run python scripts/sync_docs_site.py
+    cd apps/docs && pnpm build
+
+site-dev:
+    uv run python scripts/sync_docs_site.py
+    cd apps/docs && pnpm dev
 
 # Benchmark suite (MISSION.md section 10): raw JSON results + SVG charts.
 bench:

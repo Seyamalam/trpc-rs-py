@@ -1,0 +1,91 @@
+---
+title: "Live type sync"
+description: "trpc-py dev is the development loop: it watches your Python sources and regenerates the TypeScript declaration file on every save, so the frontend's AppRoute..."
+---
+
+`trpc-py dev` is the development loop: it watches your Python sources and
+regenerates the TypeScript declaration file on every save, so the
+frontend's `AppRouter` type is never more than a moment behind the
+backend.
+
+```bash
+trpc-py dev --app server:router --out web/app-router.d.ts
+```
+
+The design target (MISSION §2) is **under 1 second from save to an
+updated `.d.ts`** for a 200-procedure router. The generator itself is
+far under that — `generate_types` measures **3.5 ms** for 200
+procedures, `generate_zod` 3.0 ms (see
+[performance findings](/docs/performance)). The rest of the budget is spent
+on filesystem-notify latency and re-importing the edited module.
+
+## What happens on each save
+
+1. **Watch.** A Rust `notify` backend (`_core.Watcher`) watches the
+   `--app` module's top-level directory plus any `--watch` directories,
+   and reports changes in debounced batches — `--debounce-ms` sets the
+   quiet window (default 100 ms; coalescing is capped at 2 s, so a
+   formatter burst still settles fast). Only `.py` files trigger a
+   regeneration; one save regenerates once.
+2. **Reload.** The `.d.ts` is produced in a **fresh subprocess**, so
+   every save sees real module state — no `importlib.reload` staleness,
+   no half-imported modules.
+3. **Write atomically.** Output goes to a sibling `*.tmp` file and is
+   `os.replace`d into place **only when the content changed**, so the
+   TypeScript language server is not reloaded needlessly and your editor
+   never sees a truncated file.
+
+**Last good on error.** If the reload fails — a syntax error, an import
+error, an unmappable annotation — the traceback prints to stderr and the
+previous `.d.ts` stays in place. Your frontend keeps compiling against
+the last good types until you save a fix:
+
+```
+trpc-py dev: could not reload server:router:
+TypeError: procedure 'posts.by_id': parameter 'post_id' is unannotated; add a type annotation so the input can be typed
+```
+
+The first sync runs at startup, before any save, so a router that
+cannot generate surfaces its error immediately — the loop then keeps
+watching and recovers on the next good save.
+
+## Flags
+
+| Flag | Effect |
+| --- | --- |
+| `--app MODULE:ATTR` | Router import string — `pkg.server:router`, or `pkg.server:build_router()` for a factory. Required. |
+| `--out FILE` | Destination `.d.ts` path, inside your TS project. Required. |
+| `--zod-out FILE` | Also regenerate [zod input schemas](/docs/zod-codegen) to this `.ts` path on every save — same subprocess, same atomic write. |
+| `--watch DIR` | Extra directory to watch (repeatable); the app's own module directory is always included. |
+| `--server MODULE:APP` | Also start the ASGI app under `uvicorn --reload` with the same watch directories — one command runs the whole backend side. Requires `uvicorn` in the environment. |
+| `--debounce-ms N` | Quiet window before a save burst regenerates (default 100). |
+
+`trpc-py dev` is a development-only tool: it refuses to run when
+`TRPC_RS_PY_PRODUCTION` is set. Stop it with Ctrl-C; a `--server` child
+is terminated cleanly (SIGTERM, then SIGKILL after a 5 s grace).
+
+Full flag contract and exit codes: [CLI reference](/docs/cli#trpc-py-dev).
+For one-off generation in CI or a build step, use
+`trpc-py codegen ts` / `codegen zod` — same `--app`/`--out` contract
+without the watcher.
+
+## Try it
+
+`examples/live-types/` is the runnable example, and
+[the launch demo script](/docs/launch/live-types) walks the loop:
+`trpc-py init` a project, start `dev`, add a mutation to `server.py`,
+watch the new `*Procedure` interface appear in `web/app-router.d.ts`
+before the file finishes saving.
+
+## Notes and limits
+
+- The subprocess has a 30 s timeout per regeneration; a hung import is
+  reported, not waited on forever.
+- Watch directories are deduplicated; if the `--app` module cannot be
+  located on the filesystem (e.g. a builtins module), the current
+  directory is watched.
+- Watcher backend errors are printed and the loop keeps watching —
+  transient fs events never kill the dev session.
+- Types describe what the server returns and what a well-behaved client
+  sends; see [codegen — known limitations](/docs/codegen#known-limitations)
+  for the lax-coercion caveat.

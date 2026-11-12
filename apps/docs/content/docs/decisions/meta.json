@@ -1,0 +1,20 @@
+{
+  "title": "Decision Records",
+  "pages": [
+    "0001-python-version-support",
+    "0002-json-library",
+    "0003-schema-libraries",
+    "0004-standalone-server-framework",
+    "0005-openapi-document-placement",
+    "0006-cli-implementation-language",
+    "0007-sse-subscription-architecture",
+    "0008-node-migration-link",
+    "0009-typed-errors",
+    "0010-wsgi-django-adapter-bridge",
+    "0011-context-and-middleware",
+    "0012-vercel-ai-sdk",
+    "0013-standalone-server",
+    "0014-python-client",
+    "0015-procedure-timeout-and-sse-limits"
+  ]
+}

@@ -1,0 +1,99 @@
+---
+title: "API reference"
+description: "Public API of the trpcrspy package, generated from docstrings with mkdocstrings. Everything reachable from import trpcrspy is listed below, grouped by module..."
+---
+
+Public API of the `trpc_rs_py` package, generated from docstrings with
+[mkdocstrings](https://mkdocstrings.github.io). Everything reachable from
+`import trpc_rs_py` is listed below, grouped by module; `trpc_rs_py._core`
+(the Rust extension) is private and intentionally undocumented here.
+
+## Package root
+
+The names re-exported by `trpc_rs_py/__init__.py` — the surface most users
+need:
+
+*Generated from docstrings — see [`trpc_rs_py`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/__init__.py).*
+## Routers and procedures
+
+*Generated from docstrings — see [`trpc_rs_py.router`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/router.py).*
+## ASGI adapters
+
+`mount`/`attach` for FastAPI, Starlette, and any ASGI app:
+
+*Generated from docstrings — see [`trpc_rs_py.asgi`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/asgi.py).*
+## WSGI adapters
+
+`mount_wsgi`/`attach_flask`/`wsgi_from_asgi` for Flask and other WSGI apps:
+
+*Generated from docstrings — see [`trpc_rs_py.wsgi`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/wsgi.py).*
+## Django views
+
+Sync (`trpc_view`, WSGI) and async (`trpc_view_async`, ASGI) views:
+
+*Generated from docstrings — see [`trpc_rs_py.django`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/django.py).*
+## Standalone server
+
+*Generated from docstrings — see [`trpc_rs_py.serve`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/serve.py).*
+## REST + OpenAPI
+
+`mount_rest` serves `RestRoute` procedures as REST endpoints with an
+OpenAPI 3.1 document; `generate_openapi`/`merge_openapi` produce the
+document for embedding in an existing spec:
+
+*Generated from docstrings — see [`trpc_rs_py.rest`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/rest.py).**Generated from docstrings — see [`trpc_rs_py.openapi`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/openapi.py).*
+## Errors
+
+`TRPCError`, the official v11 `TRPCErrorCode` enum, and the helpers behind
+typed errors:
+
+*Generated from docstrings — see [`trpc_rs_py.errors`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/errors.py).*
+## Context
+
+`RequestContext`, `ContextFactory`, and the `ctx` injection helpers:
+
+*Generated from docstrings — see [`trpc_rs_py.context`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/context.py).*
+## Middleware
+
+`Call`/`Next`/`Middleware` plus the built-in `logging_middleware`,
+`timing_middleware`, `tracing_middleware`, `rate_limit`, and
+`require_auth`:
+
+*Generated from docstrings — see [`trpc_rs_py.middleware`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/middleware.py).*
+## CORS and CSRF
+
+*Generated from docstrings — see [`trpc_rs_py.cors`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/cors.py).**Generated from docstrings — see [`trpc_rs_py.csrf`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/csrf.py).*
+## Streaming and AI helpers
+
+`tracked` SSE event ids and the Vercel AI SDK v5 helpers
+(`ai_text_stream`, `ai_message_stream`, `ai_data_part`, `ai_sdk_endpoint`):
+
+*Generated from docstrings — see [`trpc_rs_py.streaming`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/streaming.py).*
+## Testing
+
+`test_client`, `flask_test_client`, `django_test_client`, and the
+`TestClient` API:
+
+*Generated from docstrings — see [`trpc_rs_py.testing`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/testing.py).*
+## Python client
+
+Sync `Client`/`create_client` (stdlib only) and async `AsyncClient`/
+`create_async_client` (requires `httpx`):
+
+*Generated from docstrings — see [`trpc_rs_py.client`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/client.py).*
+## Code generation
+
+Deterministic generators — all raise `TypeError` rather than emit `any`:
+
+* `generate_types(router)` → `AppRouter` `.d.ts` for the official client
+* `generate_zod(router)` → zod v4 input schemas
+* `generate_python_client(router)` → `AppRouterClient` module
+* `generate_openapi`/`merge_openapi` → OpenAPI 3.1 document
+
+*Generated from docstrings — see [`trpc_rs_py.codegen`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/codegen.py).**Generated from docstrings — see [`trpc_rs_py.zodgen`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/zodgen.py).**Generated from docstrings — see [`trpc_rs_py.pyclient`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/pyclient.py).*
+## Validation helpers
+
+*Generated from docstrings — see [`trpc_rs_py.validation`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/validation.py).*
+## Dev tooling and panel
+
+*Generated from docstrings — see [`trpc_rs_py.dev`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/dev.py).**Generated from docstrings — see [`trpc_rs_py.panel`](https://github.com/Seyamalam/trpc-rs-py/blob/main/python/trpc_rs_py/panel.py).*

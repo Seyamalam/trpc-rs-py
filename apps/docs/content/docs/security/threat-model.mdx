@@ -1,0 +1,135 @@
+---
+title: "Threat model"
+description: "Scope: trpcrspy (all adapters, the standalone server, the CLI, and generated artifacts). Audience: deployers and contributors. Updated for the 0.8.0 security..."
+---
+
+Scope: `trpc_rs_py` (all adapters, the standalone server, the CLI, and
+generated artifacts). Audience: deployers and contributors. Updated for
+the 0.8.0 security milestone.
+
+## System shape and trust boundaries
+
+```
+untrusted client ──HTTP──► transport (uvicorn / standalone hyper /
+│                          wsgi / django bridge)
+▼
+ASGI dispatch (Python): body read → _core.parse_call (Rust)
+→ input validation (pydantic) → middleware → handler → output
+validation → _core result/error envelope → HTTP response
+```
+
+Trust boundaries:
+
+1. **Wire → Rust protocol layer.** Everything below the handler is
+   attacker-controlled bytes: query strings, bodies, headers, methods.
+   Parsing happens in Rust with bounded allocation.
+2. **Handler → client output.** Handler return values are validated
+   against output schemas before serialization; a buggy or compromised
+   handler cannot emit a malformed envelope.
+3. **Process → generated artifacts.** `codegen`/`dev` read handler
+   signatures; generated files are data, not executable config (except
+   the generated Python client, which is ordinary typed code the
+   consumer runs voluntarily).
+4. **Standalone server ↔ asyncio loop.** Rust drives the app coroutine
+   across the GIL; all protocol decisions stay in the same code path as
+   every other adapter — there is no second dispatch implementation to
+   drift.
+
+## Assets
+
+- Availability of the serving process and its event loop.
+- Integrity of procedure results (inputs must be exactly what handlers
+  validated; outputs exactly what schemas permit).
+- Confidentiality: error envelopes must not leak internals in
+  production; headers carry credentials.
+- Resource bounds: memory per request/connection, CPU per call.
+
+## Threats and mitigations
+
+### T1 — Resource exhaustion via oversized or malformed input
+
+| Attack | Mitigation |
+| --- | --- |
+| Huge request body | `Limits.max_body_size` (default 1 MiB) enforced in the Rust parser on both `Content-Length` and actual bytes; standalone enforces it at the transport layer with the same `PAYLOAD_TOO_LARGE` envelope. Tested in `test_core_boundary.py`, `test_serve.py`. |
+| Deeply nested JSON | `Limits.max_json_depth` (128) enforced during deserialization — recursion guards in both the Rust parser and the Python↔JSON conversion layer. |
+| Large query strings | GET `input=` bounded by `max_body_size`; percent-decoding rejects truncated/invalid escapes and non-UTF8. |
+| Giant batch | `Limits.max_batch_size` bounds calls per request; batch input object must be exactly `{0..n-1}` keys — no sparse-index amplification. |
+| Hung handler | `Limits.procedure_timeout` (ADR 0015) bounds awaiting per call → `TIMEOUT` (-32008/408). Caveat: sync CPU-bound handlers can't be preempted — documented. |
+| Slow SSE consumer | Pull-based backpressure: the generator only advances when `send()` completes; the standalone bridge adds a bounded 16-chunk channel. `max_sse_event_size` caps per-frame bytes (existing mount kwarg). |
+| Connection churn | ASGI `http.disconnect` cancels generators and runs their `finally`/cleanup paths; tested on the standalone server. |
+
+### T2 — Protocol-confusion and envelope injection
+
+| Attack | Mitigation |
+| --- | --- |
+| Method confusion (mutation via GET) | Queries are GET-only/side-effect-free by contract; mutations only accept POST (plus the official `POST`-override for queries in batches). Method check happens in Rust before dispatch. |
+| Path charset smuggling | Procedure paths restricted to `[A-Za-z0-9._-]`-style charset in the router — no traversal or null bytes reach handler lookup. |
+| Batch key manipulation | Indices must be sequential `0..n-1`; out-of-range or non-sequential keys → `BAD_REQUEST` for the whole request. |
+| Envelope forgery | `result`/`error` keys are protocol-owned; handler-supplied `data` can't overwrite envelope keys (official key precedence is enforced and tested). |
+| SSE frame injection | `data:` frames reject multiline data; `id:` fields (`tracked()`) reject CR/LF/injection characters; resume ids with illegal characters are dropped. Tested in `sse` unit tests. |
+| Serialized-error smuggling | `serialized-error` frames carry the flat official shape only — no arbitrary fields cross the wire. |
+
+### T3 — Information disclosure
+
+| Attack | Mitigation |
+| --- | --- |
+| Stack traces / internals in errors | `production=True` (or `TRPC_RS_PY_PRODUCTION=1`) produces fixed-shape envelopes: declared `TRPCError`s pass their own message; everything else becomes `INTERNAL_SERVER_ERROR` with no internals. Tested per adapter and on the standalone server. |
+| Schema/endpoint enumeration | `/trpc/panel` and its `/panel/schema` endpoint are development-only by default and production-disabled unless explicitly enabled. |
+| Dev server exposure | `trpc-py dev` refuses to run under production mode. |
+| Header leakage | No response carries request headers; `RequestContext` is process-local. |
+
+### T4 — Cross-site attacks on cookie auth
+
+| Attack | Mitigation |
+| --- | --- |
+| CSRF on GET queries | Queries over GET are required to be side-effect free; `csrf_protect()` filters credentialed requests by Fetch Metadata/`Origin` with an allowlist. |
+| CORS over-permission | `cors()` is deny-by-default: explicit origin allowlist, credentials only with matching origins, `Vary` merged correctly. |
+| Preflight smuggling | Preflight handled by the wrapper before dispatch — handlers never see `OPTIONS`. |
+
+### T5 — Parser memory-safety and crashes
+
+| Attack | Mitigation |
+| --- | --- |
+| Malformed bytes panicking Rust | `#![deny(unsafe_code)]` workspace-wide; all FFI `unsafe` is confined to the `ffi` module with `// SAFETY:` comments. Every parse path returns a typed `ProtocolError`, never a panic — malformed-input fuzzing (cargo-fuzz) and `test_core_boundary.py` cover this. |
+| Non-finite/oversized numbers | Conversion rejects non-finite floats and ints beyond the JSON-safe/u64 range. |
+| Recursion via input depth | JSON depth limit + recursion guard in `serde_json` → `BAD_REQUEST`. |
+
+### T6 — Dependency and supply-chain risk
+
+| Attack | Mitigation |
+| --- | --- |
+| Vulnerable crate/dependency | `cargo deny` advisories + bans + license checks, `pip-audit`, `pnpm audit` — wired into `just release-check` via `scripts/audit.sh`. Runtime deps are minimal (pydantic; httpx only for the optional async client). |
+| Typosquatted codegen output | Generated artifacts are deterministic from handler annotations; no remote fetch during codegen. |
+
+## Structurally bounded (not knobs)
+
+- **Subscriptions per connection**: the transport is HTTP+SSE — one
+  request carries at most `max_batch_size` subscription calls, and
+  HTTP/1.1 gives one stream per connection. HTTP/2 multiplexing is the
+  ASGI server's concern. See ADR 0015.
+- **Per-client SSE buffering**: generators are pull-based and the
+  standalone bridge channel is bounded at 16 chunks; the residual
+  surface (per-frame size) is already closed by `max_sse_event_size`.
+
+## Known residual risks (documented, accepted)
+
+1. Sync CPU-bound handlers can't be preempted by `procedure_timeout` —
+   deployers should run CPU-heavy work off the event loop.
+2. uvicorn-internal buffering sits below our layer; per-client buffer
+   enforcement is delegated to the ASGI server on non-standalone
+   deployments.
+3. Python-side dispatch cost means a single-loop deployment caps
+   request concurrency at event-loop fairness — scale out, not up.
+4. Rate limiting is in-process (per interpreter); multi-process
+   deployments need an external limiter (documented in `rate_limit`).
+
+## Verification
+
+- `tests/test_core_boundary.py`, `tests/test_serve.py`,
+  `tests/test_limits.py` — per-limit security tests.
+- `fuzz/` — cargo-fuzz targets on all untrusted parse paths; smoke run
+  in `just release-check`.
+- `scripts/audit.sh` — all dependency audits; report in
+  `docs/security/audit-report.md`.
+- Protocol-compat suite (`clients/ts-tests`) pins the official v11
+  client against every adapter including error envelopes.

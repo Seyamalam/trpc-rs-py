@@ -1,0 +1,77 @@
+---
+title: "trpc-rs-py"
+description: "Version 1.0.0-beta.1 is released \u2014 the public API is frozen (api-freeze) on the way to 1.0.0. See MEMORY.md for what is done and what comes next, the feature..."
+---
+
+**The Python backend for your tRPC app.** Define procedures in Python (FastAPI,
+Starlette, Flask, Django, or a standalone Rust server), call them from
+TypeScript with the official `@trpc/client` — full end-to-end types, live as
+you edit Python. The protocol handling lives in a Rust core built with PyO3,
+so the adapter adds near-zero overhead over a plain JSON endpoint.
+
+## Status
+
+Version 1.0.0-beta.1 is released — the public API is frozen
+([api-freeze](/docs/api-freeze)) on the way to 1.0.0.
+See
+[MEMORY.md](https://github.com/Seyamalam/trpc-rs-py/blob/main/MEMORY.md) for
+what is done and what comes next, the
+[feature matrix](/docs/feature-matrix) for feature status per adapter, and the
+[wire protocol](/docs/protocol) page for the exact tRPC v11 wire format and its
+runtime verification against the official client.
+
+## Examples
+
+Runnable examples live in `examples/`, each with a `smoke.sh` exercised by
+the gate:
+
+- `fastapi-basic` — queries, mutations, batching, and error envelopes.
+- `ai-chat` — an LLM-style streamed `chat` subscription with tracked,
+  resumable SSE events, plus the same router serving REST + OpenAPI.
+- `live-types` — `trpc-py dev` regenerating `app-router.d.ts` on every save.
+
+## TypeScript types from your Python router
+
+`generate_types(router)` emits an `AppRouter` declaration file that the
+official `@trpc/client` v11 consumes directly: literal procedure paths, exact
+input/output types from Python annotations and Pydantic v2 models, and a hard
+`TypeError` instead of `any` for anything unmappable. See
+[TypeScript codegen](/docs/codegen) for the usage, the type-mapping table, and
+the tested limits.
+
+## Why not FastAPI + OpenAPI codegen?
+
+Fair question — FastAPI's OpenAPI document plus a TypeScript client
+generator (`openapi-typescript`, Orval, `openapi-generator`) is a real
+workflow, and for pure-REST APIs it is the right one. The differences
+that matter:
+
+- **Static vs live types.** OpenAPI codegen runs on a build step: you
+  regenerate the client, commit it, and hope nobody's backend change
+  drifted from the checked-in types. `trpc-py dev` rewrites the `.d.ts`
+  on every Python save — the type error shows up in your editor, not in
+  CI. See [live type sync](/docs/live-type-sync).
+- **Request/response only.** OpenAPI has no tRPC subscriptions, no
+  `lastEventId` resume, no batching semantics — streaming endpoints get
+  hand-rolled SSE. Here an `async def` generator *is* a typed
+  subscription over SSE, and client disconnect cancels it. See
+  [subscriptions](/docs/subscriptions) and [AI streaming](/docs/ai-streaming).
+- **No typed-error protocol.** OpenAPI models error *documents*; the
+  client sees a status code and an untyped detail body. tRPC's error
+  envelope carries a code end-to-end, and declared errors become a
+  discriminated union in TypeScript. See [typed errors](/docs/typed-errors).
+- **Generated client vs official client.** OpenAPI generators emit their
+  own fetch wrappers; trpc-rs-py speaks the tRPC v11 wire format, so the
+  official `@trpc/client` and `@trpc/react-query` work unmodified. See
+  [the wire protocol](/docs/protocol) for what that means byte-for-byte.
+
+And it is not either/or: the same router can serve REST + an OpenAPI 3.1
+document for mobile, partners, and `curl`, so adopting trpc-rs-py is not
+lock-in — see [REST + OpenAPI](/docs/rest).
+
+**When FastAPI alone wins:** there is no TypeScript client at all
+(public partner API, mobile-only consumers), the OpenAPI ecosystem is
+the point (gateways, contract testing, multi-language codegen), or REST
+*is* the product contract rather than an implementation detail. For a
+side-by-side feature breakdown see the
+[feature matrix](/docs/feature-matrix).

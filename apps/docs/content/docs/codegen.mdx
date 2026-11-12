@@ -1,0 +1,270 @@
+---
+title: "TypeScript codegen"
+description: "generatetypes(router) turns a Python Router into the source text of a TypeScript declaration file exporting an AppRouter that the official @trpc/client v11 c..."
+---
+
+`generate_types(router)` turns a Python `Router` into the source text of a
+TypeScript declaration file exporting an `AppRouter` that the **official
+`@trpc/client` v11** consumes directly. Procedure paths become literal
+properties, and every input and output type comes from the handler's Python
+annotations — including Pydantic v2 models — mapped to JSON-compatible
+TypeScript. Nothing is ever silently emitted as `any`: an annotation the
+generator cannot map raises `TypeError` naming the procedure.
+
+## Usage
+
+```python
+# snippet: skip — writes to ./src, which only exists in a scaffolded project
+from pathlib import Path
+
+from trpc_rs_py import Router, generate_types
+
+router = Router()
+
+@router.query
+def post_by_id(post_id: int) -> str:
+    return f"post {post_id}"
+
+Path("src/app-router.d.ts").write_text(generate_types(router))
+```
+
+Write the output to a `.d.ts` file inside your TypeScript project and pass it
+to the official client:
+
+```ts
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import type { AppRouter, RouterInputs, RouterOutputs } from "./app-router";
+
+const client = createTRPCClient<AppRouter>({
+  links: [httpBatchLink({ url: "http://127.0.0.1:8000/trpc" })],
+});
+
+// Fully typed: input must be { post_id: number }, output is string.
+const post = await client.post_by_id.query({ post_id: 1 });
+```
+
+Every project that uses `@trpc/client` already depends on `@trpc/server`;
+the generated file imports a small set of type-only names from
+`@trpc/server/unstable-core-do-not-import` — the same module the official
+[infer-types guide](https://trpc.io/docs/client/vanilla/infer-types) tells
+you to import from. No runtime dependency is added to your Node bundle.
+
+The generated module exports:
+
+| Export | Meaning |
+| --- | --- |
+| `AppRouter` | The router type for `createTRPCClient<AppRouter>` / `createTRPCProxyClient<AppRouter>` and `@trpc/react-query`. |
+| `AppRouterRecord` | The nested record of procedures, as literal properties. |
+| `ProcedureMap` | Alias of `AppRouterRecord`, for per-procedure inference helpers such as `inferProcedureInput<ProcedureMap["create_post"]>`. |
+| `RouterInputs` / `RouterOutputs` | Official inference helpers applied to `AppRouter`: every procedure's input/output type by path. |
+| One interface per procedure | e.g. `PostsBy_idProcedure`, extending the official `QueryProcedure` / `MutationProcedure`. |
+| One interface per Pydantic model | e.g. `Post`, referenced by procedure input/output types. |
+
+## Input shapes
+
+The input type mirrors the runtime validation contract exactly (see
+[validation](/docs/validation)):
+
+- Each annotated parameter becomes an object property, named after the
+  Python parameter. A parameter with a Python default is optional (`?`).
+- A handler with no parameters takes no input (`input: undefined`); the
+  client calls it with no argument.
+- A handler returning `None` (or `-> None`) has the output type `null`.
+
+So `def greet(name: str, greeting: str = "Hello") -> str` is called as
+`client.greet.query({ name: "Ada" })`, and `greeting` may be omitted.
+
+## Type mapping
+
+| Python | TypeScript |
+| --- | --- |
+| `str` | `string` |
+| `int` | `number` |
+| `float` | `number` |
+| `bool` | `boolean` |
+| `None` / `NoneType` | `null` |
+| `X \| Y`, `Union[X, Y]`, `Optional[X]` | `X \| Y` (with `null`) |
+| `Literal["a", 1, True, None]` | `"a" \| 1 \| true \| null` |
+| `Enum` (str/int/float values) | literal union of the values |
+| `list[X]`, `Sequence[X]`, `set[X]`, `frozenset[X]` | `Array<X>` |
+| `list` (unparameterized), `set` | `Array<unknown>` |
+| `tuple[A, B]` | `[A, B]` |
+| `tuple[A, ...]` | `Array<A>` |
+| `dict[str, X]`, `Mapping[str, X]` | `Record<string, X>` |
+| `dict` (unparameterized) | `Record<string, unknown>` |
+| `datetime`, `date`, `time`, `UUID` | `string` (ISO format) |
+| Pydantic v2 `BaseModel` | exported `interface` |
+| `Annotated[X, ...]` | the mapping of `X` when metadata is validation-only; serializer metadata is rejected |
+
+Pydantic models are emitted as interfaces. Nested models, defaults (fields
+become optional), validation-only `Annotated` metadata, recursive
+self-references, and enums are supported. Serializer metadata in `Annotated`
+is rejected because it may change the wire type.
+
+**Pydantic aliases.** Every field is emitted as a single TypeScript property
+whose key is the field's wire name — valid only when one key is both accepted
+at input and emitted by serialization. Which keys the runtime accepts follows
+the model's effective config flags (inherited config included):
+
+- `validate_by_alias` (default `True`) accepts the alias
+  (`validation_alias`, falling back to `alias`).
+- `validate_by_name` (default `False`, falling back to the legacy
+  `populate_by_name`) additionally accepts the Python field name.
+
+Serialization emits the Python field name, or `serialization_alias` (falling
+back to `alias`) when the model sets `serialize_by_alias=True`.
+
+Supported: an alias equal to the field name; `validate_by_name=True` (or
+legacy `populate_by_name=True`) with `serialize_by_alias` unset — the field
+name is both accepted and emitted; `serialize_by_alias=True` with an alias
+and `validate_by_name` unset — the alias is both accepted and emitted. The
+generator verifies its choice against the runtime contract in tests
+(accepted/rejected input keys and emitted output keys are probed through
+`build_input_validator` / `build_output_validator`).
+
+Unsupported configurations raise a `TypeError` naming the model and field:
+
+- Asymmetric wire names — for example `validate_by_alias=False,
+  validate_by_name=True, serialize_by_alias=True` (input takes the field
+  name, output emits the alias), or `serialize_by_alias=True` with a
+  `serialization_alias` that no accepted input key matches.
+- Structured validation aliases (`AliasPath` / `AliasChoices`), which make
+  the runtime accept several or nested input keys.
+
+The generator also rejects Pydantic `PlainSerializer` / `WrapSerializer`
+metadata in `Annotated`, model `json_encoders`, and non-default
+`ser_json_temporal` modes for date/time fields: these may change a JSON string
+into another type. Validation-only `Field` metadata such as bounds remains
+supported. Models with `extra="allow"` are rejected because unknown input
+fields are preserved in serialized output but are absent from a closed
+interface. Serializer decorators, computed fields, `Field(exclude=True)`, and
+`Field(exclude_if=...)` are also rejected (see hard failures below).
+
+Procedure-level input keys are unaffected: the runtime builds the procedure
+input model from Python parameter names with no aliases, so its keys stay
+exactly the parameter names.
+
+## Hard failures instead of `any`
+
+These raise `TypeError` naming the procedure (or model field) and the
+offending annotation:
+
+- Unannotated parameters or return values.
+- `Any`, `object`, custom classes, `bytes`, `Decimal`, and other annotations
+  without an exact JSON-compatible TypeScript mapping.
+- `**kwargs` (arbitrary extra keys) and `*args`-only handlers (dynamic
+  list/scalar/null input).
+- Mappings whose keys are not strings.
+- Pydantic models whose input and output wire names cannot share one
+  property: asymmetric alias configurations (see the alias section above)
+  and structured validation aliases (`AliasPath`/`AliasChoices`).
+- `Field(exclude=True)` and `Field(exclude_if=...)` fields — the runtime
+  omits them (always, or conditionally) from serialized output, so no single
+  TypeScript property describes them.
+- `RootModel` subclasses — they validate and serialize as a bare JSON
+  scalar or array, not a JSON object; annotate the handler with the root
+  type instead.
+- Models carrying `@field_serializer` / `@model_serializer` decorators
+  (including ones inherited from base models) — they can change the
+  serialized JSON type or shape, which the generator cannot verify.
+- Models with `@computed_field` properties — they appear in serialized
+  output but are not model fields, so the interface would omit them.
+- Models with `extra="allow"`, non-empty `json_encoders`, or non-default
+  `ser_json_temporal` on date/time fields; these alter output shape/type.
+- `Annotated` types carrying Pydantic `PlainSerializer`, `WrapSerializer`,
+  or `SerializeAsAny` metadata; this can change the wire type or include
+  runtime subclass fields absent from the declared annotation.
+- Procedure paths that are both a procedure and a prefix of another (for
+  example `a` and `a.b`), which cannot be represented as a nested record.
+
+## Zod schemas
+
+`trpc-py codegen zod --app module:router --out schemas.ts` emits a zod v4
+module validating **procedure inputs** — the same object shapes the `.d.ts`
+input types describe — so frontend forms validate with the backend's rules.
+One `export const <Model>` per referenced Pydantic model plus one
+`export const <Proc>Input` per input-taking procedure; no-input procedures
+emit a comment.
+
+Constraint mapping:
+
+| Pydantic / Python | zod v4 |
+| --- | --- |
+| `int` / `float` / `bool` / `str` | `z.number().int()` / `z.number()` / `z.boolean()` / `z.string()` |
+| `Field(gt/ge/lt/le=)` | `.gt()/.gte()/.lt()/.lte()` |
+| `Field(multiple_of=)` | `.multipleOf()` |
+| `StringConstraints(min_length/max_length/pattern)` | `.min()/.max()/.regex()` |
+| `Field(min_length/max_length)` on lists | `.min()/.max()` |
+| `Literal[...]` | `z.literal(v)` / `z.union([...])` |
+| `str`-valued `Enum` | `z.enum([...])` |
+| `X \| None` | `.nullable()`; `= None` adds `.optional()`; other defaults → `.default(v)` |
+| `Union[A, B]` | `z.union([...])` |
+| models sharing a `Literal` field | `z.discriminatedUnion("field", [...])` |
+| `list[T]` / `tuple[...]` / `dict[str, T]` | `z.array(...)` / `z.tuple([...])` / `z.record(z.string(), ...)` |
+| `datetime` / `date` / `time` / `timedelta` / `UUID` | `z.iso.datetime()` / `.date()` / `.time()` / `.duration()` / `z.uuid()` |
+
+Dropped constraints emit `// dropped: <name>` comments (e.g.
+`StringConstraints.strip_whitespace`, `default_factory`, non-JSON defaults,
+unrecognized metadata classes). Pydantic features that cannot be mapped at
+all — coercion differences (Pydantic lax accepts `"30"`→`int`, `True`→`int`;
+zod is strict), custom validators, serializer metadata, computed fields,
+`RootModel`, `**kwargs`, unannotated parameters — either raise `TypeError`
+(same refusal set as `generate_types`) or are documented divergences. Regex
+patterns are emitted verbatim except `/` escaping; Python-only constructs
+(`\A`, `\Z`, `(?P<name>…)`) do not translate. Pydantic accepts a broader set
+of ISO strings than `z.iso.*` validates in some edge cases.
+
+Parity is tested end to end: `fixtures/generate_zod_cases.py` uses
+`hypothesis` to produce JSON values, records Pydantic's verdict per value in
+`fixtures/zod-cases.json`, and `src/zod-parity.test.ts` asserts the
+generated `SignupInput` schema's `safeParse` returns the same verdict — plus
+`z.input`/`z.output` assignability to the generated router types.
+
+## Known limitations
+
+- **Input lax coercion.** The server validates inputs with Pydantic's default
+  lax mode, so `{"post_id": "1"}` is accepted at runtime even though the
+  generated type says `number`. The types describe what the *server returns*
+  and what a well-behaved client sends; constraint checks (`Field(ge=1)`) are
+  also invisible to TypeScript. The planned Zod codegen (roadmap 0.4.0)
+  closes this gap for forms.
+- **Shared model interfaces.** One interface is emitted per Pydantic model
+  class, so a field that defaults to `None` shows up as optional even when
+  that model is also used as an output where the field is always present.
+  This is a safe over-approximation.
+- **Output-only fidelity.** Outputs are what the server JSON-serializes, so
+  `datetime` fields genuinely arrive as strings; the mapping table above is
+  accurate in both directions for the supported types.
+- **Generation, not live sync.** Call `generate_types` in your build step or
+  (from 0.3.0) via `trpc-py dev`, which regenerates on every save.
+
+## CLI status
+
+The `trpc-py` CLI — including `trpc-py codegen ts` — is specified as a Rust
+CLI in MISSION.md section 8 and lands with the CLI milestone (0.6.0). Today,
+call `generate_types(router)` from Python as shown above; the CLI is recorded
+as a follow-up in MEMORY.md, not faked.
+
+## Test evidence
+
+- `tests/test_codegen.py`: mapping table, failure contract, determinism,
+  name-collision and injection-safety cases, alias/exclusion hard-failure
+  cases, TypeScript identifier sanitization (including `never`/`undefined`,
+  built-in generics such as `Array`/`Record`, and type-context keywords such
+  as `keyof`/`infer`/`readonly`/`unique`), a matrix asserting the generator
+  agrees with the probed Pydantic runtime for every alias config
+  (accepted/rejected input keys and emitted output keys via
+  `build_input_validator` / `build_output_validator`), rejections for
+  `RootModel`, custom field/model serializers (also inherited), computed
+  fields and `exclude_if`, tests rejecting `extra="allow"`, custom JSON
+  encoders, non-ISO temporal modes, Annotated serializers and
+  `SerializeAsAny`, plus a drift test asserting the committed fixture equals
+  `generate_types(fixture_router())`.
+- `clients/ts-tests/`: `router_source.py` builds the representative router,
+  `generate-fixture.py` regenerates the committed
+  `src/app-router.d.ts`, and `src/index.ts` type-checks with `tsc --noEmit`
+  against the official `@trpc/client` v11. Generated model names are sanitized
+  against TypeScript keywords, built-ins, utilities, and imported inference
+  helpers (with collision tests). Exact input/output types are asserted on
+  positive cases and `@ts-expect-error` on wrong input shapes, unknown
+  paths, wrong method names, and wrong output assumptions.

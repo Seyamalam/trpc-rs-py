@@ -1,0 +1,58 @@
+---
+title: "ADR 0007: SSE subscription architecture"
+description: "Status: Accepted Date: 2026-11-10"
+---
+
+Status: Accepted
+Date: 2026-11-10
+
+## Context
+
+Milestone 0.3.0 needs tRPC v11 subscriptions compatible with the official
+`httpSubscriptionLink` (GET + `EventSource` over Server-Sent Events). Two
+decisions matter: where SSE frames are encoded, and how the ASGI adapter
+dispatches subscription calls versus ordinary query/mutation traffic.
+
+## Options
+
+1. **Encode frames in Python.** Simplest, but adds a second implementation of
+   the wire format next to `trpc-core`, puts string building on the GIL per
+   event, and leaves the future standalone Rust server without SSE.
+2. **Encode frames in `trpc-core` (`SseEncoder`), thin PyO3 wrapper.** One
+   byte-exact implementation of the official format (connected, data + `id:`,
+   `restore-id`, `ping`, `serialized-error`, `return`), stateful resume-id
+   tracking, sanitization of illegal `id` characters, shared by every
+   adapter and later by the standalone server.
+3. **Dispatch subscriptions inside the normal call loop.** Rejected: the
+   official server answers a *single unbatched* subscription with an SSE
+   stream whose errors ride as `serialized-error` events, while *batched*
+   subscriptions and mixed-type batches fail with JSON envelopes. The
+   dispatch must branch on batch/arity before streaming, not per call.
+
+## Decision
+
+Option 2 + the dispatch rule from option 3:
+
+- `crates/trpc-core/src/sse.rs` holds `SseEncoder` plus the static
+  `CONNECTED`/`PING`/`RETURN` frames and `encode_frame`, all verified against
+  `@trpc/server` 11.25.0 output.
+- `trpc_rs_py._core.SseEncoder` exposes it to Python; the ASGI adapter owns
+  streaming (connected first, method/validation failures as
+  `serialized-error`, `return` on clean end, `http.disconnect` cancels the
+  pending `__anext__` and `aclose()`s the generator).
+- Dispatch order mirrors the official server: non-GET/POST methods and
+  batch/mixed-type checks resolve before streaming; only a single unbatched
+  subscription opens an SSE response.
+- JSONL stream calls (`trpc-accept: application/jsonl`) are recognized but
+  JSONL responses are deferred; the unbatched-rejection rule is implemented
+  and the rest is documented as a deviation.
+
+## Consequences
+
+- The wire format is proven once, in Rust unit tests, and every adapter
+  inherits it. Subscription semantics that differ per framework stay in the
+  adapter (backpressure, disconnect handling), not the format.
+- `tracked(id, data)` ids are adapter metadata: codegen types them
+  `{ id, data }` for clients while validation sees the unwrapped item.
+- Adding JSONL responses later requires a second producer in the same
+  dispatch branch; the frame encoder does not change.

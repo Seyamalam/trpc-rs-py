@@ -28,7 +28,9 @@ examples/           # runnable examples, each with README + smoke test
 benchmarks/         # benchmark harness, results JSON, plot script
 tests/              # Python unit, integration, protocol, typing tests
 clients/ts-tests/   # official @trpc/client compatibility + type tests
-docs/               # MkDocs site (built --strict)
+docs/               # documentation source of truth (MkDocs build --strict)
+apps/docs/          # Fumadocs site — content/ + public/ are GENERATED from docs/
+                    # by scripts/sync_docs_site.py; never edit them directly
 scripts/            # local CI and release scripts
 justfile            # task runner
 ```
@@ -41,6 +43,8 @@ justfile            # task runner
 - `just fmt` / `just lint` / `just test` — individual pieces.
 - Build the extension: `uv run maturin develop --release`.
 - Docs: `uv run mkdocs serve` / `uv run mkdocs build --strict`.
+- Docs site (Fumadocs): `just site` to sync + build, `just site-dev` to sync +
+  dev-server. Edit `docs/`; the sync regenerates `apps/docs/content`.
 - Python env: `uv sync --no-install-project` (maturin installs the extension).
 - TS: `pnpm` is the package manager; lockfiles are pinned and committed.
 

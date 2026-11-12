@@ -8,7 +8,8 @@ so the adapter adds near-zero overhead over a plain JSON endpoint.
 
 ## Status
 
-Version 0.2.0 is released; 0.3.0 (the launch milestone) is in development.
+Version 1.0.0-beta.1 is released — the public API is frozen
+([api-freeze](api-freeze.md)) on the way to 1.0.0.
 See
 [MEMORY.md](https://github.com/Seyamalam/trpc-rs-py/blob/main/MEMORY.md) for
 what is done and what comes next, the

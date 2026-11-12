@@ -9,6 +9,10 @@
   PyPI as `1.0.0b1` — stable `0.9.0` remains the default install; the beta is
   opt-in via `pip install trpc-rs-py==1.0.0b1`). Public API frozen under
   `docs/api-freeze.md`; all 12 production-readiness items checked.
+- Docs site: `apps/docs/` is a Fumadocs (Next.js) app. `docs/` stays the
+  source of truth — `scripts/sync_docs_site.py` renders it to MDX
+  (nav → meta.json, mermaid → `<Mermaid>`, links → `/docs/...`); `ci-docs`
+  fails if generated output drifts. `just site` / `just site-dev`.
 - 0.9.x state (see `docs/production-readiness.md` — 12/12 items checked):
   - Done: §9 examples complete (25 smokes/172 assertions in `just ci`),
     cross-platform wheels (`scripts/wheels.sh`, 7 targets, 6

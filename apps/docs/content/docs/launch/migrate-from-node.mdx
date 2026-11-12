@@ -1,0 +1,35 @@
+---
+title: "Demo script: migrate-from-node"
+description: "examples/migrate-from-node/: node-server.ts serves the original app (posts.list, posts.byId, users.me); app.py holds the moved procedures (posts.byId at its ..."
+---
+
+> **Status: ready to record.** The runnable example lives in
+> `examples/migrate-from-node/` (Node `node-server.ts`, Python `app.py`,
+> merged `client.ts`) with `@trpc-rs-py/link` in `packages/link`.
+
+**The shot:** an existing Node `@trpc/server` app keeps its frontend and its
+generated types while the backend moves to Python — same procedures, same
+wire, same client calls.
+
+## Setup
+
+`examples/migrate-from-node/`: `node-server.ts` serves the original app
+(`posts.list`, `posts.byId`, `users.me`); `app.py` holds the moved
+procedures (`posts.byId` at its original path plus `py.posts_search` under
+the link prefix); `client.ts` is one `createTRPCClient` over
+`migrationLink` + `MergedAppRouter`.
+
+## Narration beats
+
+1. Run the Node server alone; call `users.me` and `posts.byId` — all Node.
+2. Start the Python server. Show `migrationLink` in `client.ts`:
+   `procedures: ["posts.byId"]` + the default `py.` prefix.
+3. Re-run `node client.ts`: `users.me` still answers from Node while
+   `posts.byId` and `py.posts_search` come from Python — one client,
+   no path rewriting.
+4. `app-router.d.ts` was produced by `trpc-py codegen ts`; show
+   `MergedAppRouter<NodeRouter, PyRouter>` keeping every procedure typed,
+   Python winning conflicts.
+5. Next step tease: move the last procedures, delete the link, drop Node.
+6. Callout: same `@trpc/client`, same protocol — verified by the
+   compatibility suite.

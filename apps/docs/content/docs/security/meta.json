@@ -1,0 +1,8 @@
+{
+  "title": "Security",
+  "pages": [
+    "threat-model",
+    "fuzzing",
+    "audit-report"
+  ]
+}

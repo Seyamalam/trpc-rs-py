@@ -1,0 +1,116 @@
+---
+title: "Coverage report \u2014 0.9.x \u2192 1.0.0-beta gate"
+description: "Measured 2026-11-12 on main (post-0.8.0). Gate requirement: \u2265 90% line coverage on both Rust and Python."
+---
+
+Measured **2026-11-12** on `main` (post-0.8.0). Gate requirement: **≥ 90%
+line coverage on both Rust and Python**.
+
+## Totals
+
+| Language | Metric | Line coverage | Missed / total | Gate |
+|----------|--------|---------------|----------------|------|
+| Python   | `pytest --cov=trpc_rs_py`          | **93%** | 269 / 4115 | ✅ |
+| Rust     | unit (`cargo llvm-cov --workspace`) | **77.61%** | 488 / 2180 | see note |
+| Rust     | integration (instrumented `.so` + pytest) | **91.6% lines / 90.0% regions** | see below | ✅ |
+
+**Both meet the gate** on the meaningful metrics: Python 93%, Rust 90.0%
+regions / 91.6% lines under integration measurement (the shipped-code
+metric — see below). The unit-only `cargo llvm-cov` number stays lower
+because `serve.rs` has no `#[cfg(test)]` coverage at all; integration is
+the metric that reflects reality for the embedded server.
+
+## The two Rust numbers and why they differ
+
+`cargo llvm-cov --workspace` instruments `cargo test` binaries only. The
+embedded server (`serve.rs`) and most of the FFI surface in `lib.rs` are
+exercised by the **Python** suite against the installed `.so` — invisible to
+that metric (serve.rs reads 0%).
+
+The second number closes that blind spot: the extension is rebuilt with
+`-Cinstrument-coverage` (`RUSTFLAGS`, see `scripts/coverage.sh`), the full
+pytest suite runs against it, and `llvm-cov report` reads the merged
+`.profdata`. That measures the *shipped* extension code — a different
+denominator (no `#[cfg(test)]` lines).
+
+### Unit coverage per file (`cargo llvm-cov --workspace`)
+
+| File | % lines | Missed |
+|------|---------|--------|
+| `trpc-core/src/lib.rs`      | 100.00% | 0 |
+| `trpc-core/src/json.rs`     |  97.73% | 1 |
+| `trpc-core/src/error.rs`    |  97.26% | 4 |
+| `trpc-core/src/protocol.rs` |  97.13% | 15 |
+| `trpc-core/src/sse.rs`      |  95.28% | 6 |
+| `trpc-core/src/watch.rs`    |  88.79% | 12 |
+| `trpc-py/src/lib.rs`        |  97.09% | 23 |
+| `trpc-py/src/serve.rs`      |   0.00% | 427 |
+
+### Integration coverage per shipped file (instrumented `.so` + pytest)
+
+| File | % lines | Missed |
+|------|---------|--------|
+| `trpc-core/src/json.rs`     | 100.00% | 0 |
+| `trpc-core/src/sse.rs`      |  92.21% | 8 regions |
+| `trpc-py/src/lib.rs`        |  92.13% | 77 regions |
+| `trpc-py/src/serve.rs`      |  94.85% | 50 regions |
+| `trpc-core/src/error.rs`    |  92.92% | 12 regions |
+| `trpc-core/src/protocol.rs` |  84.58% | 46 regions |
+| `trpc-core/src/watch.rs`    |  82.81% | 13 regions |
+
+Aggregate across the seven shipped files: **90.0% regions, 91.6% lines**
+(2070 regions / 1333 lines) after `tests/test_serve_edges.py` (real-socket
+serve.rs paths: backpressure, SSE disconnect/RST, transport 413s, shutdown
+races, bridge edge arms) and `tests/test_protocol_edges.py` (+~75 tests).
+Remaining misses are unreachable arms: `?`-propagation on infallible
+operations, hyper HTTP/0.9/2/3 version arms, dead `index_pair`/`fire(0)`
+paths, listener-accept errors.
+
+## Python per-module coverage
+
+| Module | % | Module | % |
+|--------|---|--------|---|
+| `csrf.py` / `errors.py` | 100% | `serve.py` | 91% |
+| `cors.py` | 99% | `testing.py` | 90% |
+| `zodgen.py` | 99% | `rest.py` | 87% |
+| `middleware.py` | 98% | `_bridge.py` | 87% |
+| `panel.py` | 96% | `streaming.py` | 87% |
+| `context.py` | 94% | `django.py` | 88% |
+| `openapi.py` | 93% | `wsgi.py` | 86% |
+| `codegen.py` | 92% | `router.py` | 87% |
+| `validation.py` | 91% | `asgi.py` | 88% |
+| `dev.py` / `_dev_loader.py` / `cli.py` / `client.py` / `pyclient.py` | 100% | | |
+
+(The five `dev`-era gaps — `_dev_loader.py`, `dev.py`, `cli.py`, `client.py`,
+`pyclient.py`, `zodgen.py` — went to 99–100% via
+`tests/test_{dev_loader,zodgen_edges,pyclient_edges,client_edges,cli_edges}.py`.)
+
+## Commands
+
+```sh
+# Python
+uv run pytest --cov=trpc_rs_py --cov-report=term-missing -q
+
+# Rust — full pipeline (unit + instrumented integration + Python)
+bash scripts/coverage.sh
+```
+
+Artifacts land in `target/coverage/` (`pytest.profdata`,
+`integration-report.txt`, `unit-coverage.json`).
+
+## Residual uncovered (post-gate)
+
+- `protocol.rs` `Router` impl: public Rust API unreachable via `_core`
+  (Python does its own routing) — unit-covered only.
+- `?`-propagation arms on infallible operations, hyper non-HTTP/1 version
+  arms, dead `fire(0)`/`index_pair` arm, listener-accept errors.
+- Python adapter tails: `asgi.py` disconnect paths (~58 lines),
+  `rest.py`/`streaming.py` SSE edges — all ≥86%.
+
+## Caveats
+
+- The instrumented-extension approach measures shipped code only; `#[cfg(test)]`
+  code contributes under the unit metric, not integration.
+- `watch::tests::timeout_returns_none` used to flake under instrumentation;
+  fixed by draining watcher startup events (see commit adding
+  `scripts/coverage.sh`).

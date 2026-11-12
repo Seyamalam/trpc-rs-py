@@ -1,0 +1,10 @@
+{
+  "title": "Launch materials",
+  "pages": [
+    "index",
+    "ai-chat",
+    "live-types",
+    "migrate-from-node",
+    "announcement"
+  ]
+}
