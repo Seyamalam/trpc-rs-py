@@ -38,7 +38,10 @@ for pkg in packages/*/package.json; do
   node -e "const fs=require('fs');const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[2];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')" "$pkg" "$NEW"
 done
 
-cargo check --workspace >/dev/null 2>&1  # refresh Cargo.lock for the new version
+# Refresh Cargo.lock for the new version. Keep stderr visible: a version
+# requirement that rejects the bumped version (e.g. prerelease rules) must
+# fail loudly here, not inside `just ci`.
+cargo check --workspace --quiet
 just ci
 uv run maturin build --release
 

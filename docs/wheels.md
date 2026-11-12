@@ -107,14 +107,16 @@ dependency resolves on the target libc and arch (including
 Wheels are built locally (no hosted CI) immediately before tagging:
 
 ```bash
-just wheels                       # matrix + verification into dist/wheels/
-twine check dist/wheels/*/*.whl   # optional metadata check
-uv run maturin upload dist/wheels/*/*.whl   # publishes to PyPI
+just wheels                            # matrix + verification into dist/wheels/
+uv run maturin build --sdist -o target/wheels   # sdist
+scripts/publish.sh --check-only        # metadata check on every artifact
+scripts/publish.sh                     # twine upload (reads ~/.pypirc)
 ```
 
-`scripts/release.sh` still builds the native wheel for the release tag;
-`just wheels` is the cross-platform companion that produces the full set to
-attach to the GitHub release / upload alongside it. Wire `just wheels` into
+`scripts/release.sh` still builds the native wheel for the release tag and
+`scripts/publish.sh` uploads the full set — `maturin upload` is deprecated
+and must not be used. `just wheels` is the cross-platform companion that
+produces the matrix to attach to the GitHub release / upload alongside it. Wire `just wheels` into
 `release-check` when the matrix has been exercised on a second machine; it
 is deliberately a separate recipe for now so a flaky cross toolchain cannot
 block the local gate.
