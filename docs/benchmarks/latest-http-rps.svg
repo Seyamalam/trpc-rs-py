@@ -1,52 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="570" viewBox="0 0 980 570" font-family="sans-serif">
 <rect width="980" height="570" fill="#ffffff"/>
-<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">HTTP load — requests/sec (0.8.0)</text>
+<text x="16" y="34" font-size="20" font-weight="bold" fill="#111">HTTP load — requests/sec (0.9.0)</text>
 <text x="290" y="75" font-size="13" text-anchor="end" fill="#333">batch_10 / node-trpc</text>
-<rect x="300" y="60" width="293.8" height="20" fill="#2563eb"/>
-<text x="601.8" y="75" font-size="13" fill="#111">13,354.5 req/s</text>
+<rect x="300" y="60" width="291.1" height="20" fill="#2563eb"/>
+<text x="599.1" y="75" font-size="13" fill="#111">17,631.5 req/s</text>
 <text x="290" y="105" font-size="13" text-anchor="end" fill="#333">large_payload / node-trpc</text>
-<rect x="300" y="90" width="159.6" height="20" fill="#2563eb"/>
-<text x="467.6" y="105" font-size="13" fill="#111">7,253.0 req/s</text>
+<rect x="300" y="90" width="150.6" height="20" fill="#2563eb"/>
+<text x="458.6" y="105" font-size="13" fill="#111">9,120.1 req/s</text>
 <text x="290" y="135" font-size="13" text-anchor="end" fill="#333">mutation / node-trpc</text>
-<rect x="300" y="120" width="540.0" height="20" fill="#2563eb"/>
-<text x="848.0" y="135" font-size="13" fill="#111">24,545.8 req/s</text>
+<rect x="300" y="120" width="492.5" height="20" fill="#2563eb"/>
+<text x="800.5" y="135" font-size="13" fill="#111">29,829.1 req/s</text>
 <text x="290" y="165" font-size="13" text-anchor="end" fill="#333">single_query / node-trpc</text>
-<rect x="300" y="150" width="536.3" height="20" fill="#2563eb"/>
-<text x="844.3" y="165" font-size="13" fill="#111">24,377.9 req/s</text>
+<rect x="300" y="150" width="540.0" height="20" fill="#2563eb"/>
+<text x="848.0" y="165" font-size="13" fill="#111">32,708.5 req/s</text>
 <text x="290" y="195" font-size="13" text-anchor="end" fill="#333">batch_10 / plain-fastapi</text>
-<rect x="300" y="180" width="135.9" height="20" fill="#2563eb"/>
-<text x="443.9" y="195" font-size="13" fill="#111">6,179.0 req/s</text>
+<rect x="300" y="180" width="165.8" height="20" fill="#2563eb"/>
+<text x="473.8" y="195" font-size="13" fill="#111">10,045.3 req/s</text>
 <text x="290" y="225" font-size="13" text-anchor="end" fill="#333">large_payload / plain-fastapi</text>
-<rect x="300" y="210" width="46.9" height="20" fill="#2563eb"/>
-<text x="354.9" y="225" font-size="13" fill="#111">2,132.5 req/s</text>
+<rect x="300" y="210" width="51.9" height="20" fill="#2563eb"/>
+<text x="359.9" y="225" font-size="13" fill="#111">3,143.5 req/s</text>
 <text x="290" y="255" font-size="13" text-anchor="end" fill="#333">mutation / plain-fastapi</text>
-<rect x="300" y="240" width="142.6" height="20" fill="#2563eb"/>
-<text x="450.6" y="255" font-size="13" fill="#111">6,481.3 req/s</text>
+<rect x="300" y="240" width="189.9" height="20" fill="#2563eb"/>
+<text x="497.9" y="255" font-size="13" fill="#111">11,502.1 req/s</text>
 <text x="290" y="285" font-size="13" text-anchor="end" fill="#333">single_query / plain-fastapi</text>
-<rect x="300" y="270" width="124.9" height="20" fill="#2563eb"/>
-<text x="432.9" y="285" font-size="13" fill="#111">5,677.0 req/s</text>
+<rect x="300" y="270" width="202.5" height="20" fill="#2563eb"/>
+<text x="510.5" y="285" font-size="13" fill="#111">12,264.5 req/s</text>
 <text x="290" y="315" font-size="13" text-anchor="end" fill="#333">batch_10 / trpc-fastapi</text>
-<rect x="300" y="300" width="117.7" height="20" fill="#2563eb"/>
-<text x="425.7" y="315" font-size="13" fill="#111">5,351.3 req/s</text>
+<rect x="300" y="300" width="138.5" height="20" fill="#2563eb"/>
+<text x="446.5" y="315" font-size="13" fill="#111">8,387.9 req/s</text>
 <text x="290" y="345" font-size="13" text-anchor="end" fill="#333">large_payload / trpc-fastapi</text>
-<rect x="300" y="330" width="73.7" height="20" fill="#2563eb"/>
-<text x="381.7" y="345" font-size="13" fill="#111">3,348.4 req/s</text>
+<rect x="300" y="330" width="95.5" height="20" fill="#2563eb"/>
+<text x="403.5" y="345" font-size="13" fill="#111">5,783.6 req/s</text>
 <text x="290" y="375" font-size="13" text-anchor="end" fill="#333">mutation / trpc-fastapi</text>
-<rect x="300" y="360" width="218.5" height="20" fill="#2563eb"/>
-<text x="526.5" y="375" font-size="13" fill="#111">9,931.9 req/s</text>
+<rect x="300" y="360" width="211.6" height="20" fill="#2563eb"/>
+<text x="519.6" y="375" font-size="13" fill="#111">12,816.7 req/s</text>
 <text x="290" y="405" font-size="13" text-anchor="end" fill="#333">single_query / trpc-fastapi</text>
-<rect x="300" y="390" width="224.5" height="20" fill="#2563eb"/>
-<text x="532.5" y="405" font-size="13" fill="#111">10,206.3 req/s</text>
+<rect x="300" y="390" width="234.4" height="20" fill="#2563eb"/>
+<text x="542.4" y="405" font-size="13" fill="#111">14,198.9 req/s</text>
 <text x="290" y="435" font-size="13" text-anchor="end" fill="#333">batch_10 / trpc-standalone</text>
-<rect x="300" y="420" width="115.0" height="20" fill="#2563eb"/>
-<text x="423.0" y="435" font-size="13" fill="#111">5,228.0 req/s</text>
+<rect x="300" y="420" width="154.4" height="20" fill="#2563eb"/>
+<text x="462.4" y="435" font-size="13" fill="#111">9,351.6 req/s</text>
 <text x="290" y="465" font-size="13" text-anchor="end" fill="#333">large_payload / trpc-standalone</text>
-<rect x="300" y="450" width="102.0" height="20" fill="#2563eb"/>
-<text x="410.0" y="465" font-size="13" fill="#111">4,637.3 req/s</text>
+<rect x="300" y="450" width="146.7" height="20" fill="#2563eb"/>
+<text x="454.7" y="465" font-size="13" fill="#111">8,886.4 req/s</text>
 <text x="290" y="495" font-size="13" text-anchor="end" fill="#333">mutation / trpc-standalone</text>
-<rect x="300" y="480" width="147.7" height="20" fill="#2563eb"/>
-<text x="455.7" y="495" font-size="13" fill="#111">6,715.6 req/s</text>
+<rect x="300" y="480" width="252.0" height="20" fill="#2563eb"/>
+<text x="560.0" y="495" font-size="13" fill="#111">15,261.5 req/s</text>
 <text x="290" y="525" font-size="13" text-anchor="end" fill="#333">single_query / trpc-standalone</text>
-<rect x="300" y="510" width="162.8" height="20" fill="#2563eb"/>
-<text x="470.8" y="525" font-size="13" fill="#111">7,397.9 req/s</text>
+<rect x="300" y="510" width="263.4" height="20" fill="#2563eb"/>
+<text x="571.4" y="525" font-size="13" fill="#111">15,952.5 req/s</text>
 </svg>
