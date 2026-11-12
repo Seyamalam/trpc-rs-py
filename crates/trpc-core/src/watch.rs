@@ -170,12 +170,25 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trpc-watch-idle-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let watcher = watcher_for(&dir);
-        assert!(
-            watcher
-                .next_batch(Duration::from_millis(50), Duration::from_millis(10))
+        // FSEvents can replay the temp dir's own creation after the watcher
+        // starts (and coverage instrumentation widens the latency window), so
+        // drain startup noise until the channel goes quiet — a quiet watcher
+        // must then report `None` within the deadline.
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            match watcher
+                .next_batch(Duration::from_secs(1), Duration::from_millis(50))
                 .unwrap()
-                .is_none()
-        );
+            {
+                None => break,
+                Some(_) => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "watcher startup events never settled"
+                    );
+                }
+            }
+        }
         fs::remove_dir_all(&dir).ok();
     }
 

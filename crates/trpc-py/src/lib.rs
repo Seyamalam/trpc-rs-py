@@ -618,7 +618,11 @@ mod ffi {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use pyo3::exceptions::PyTypeError;
+        use pyo3::{
+            exceptions::PyTypeError,
+            types::{PyModule, PyTuple},
+        };
+        use std::time::Instant;
 
         #[test]
         fn json_to_python_and_python_to_json_round_trip_values() {
@@ -815,6 +819,296 @@ mod ffi {
             assert_eq!(limits.max_body_size, 123);
             assert_eq!(limits.max_batch_size, 7);
             assert_eq!(limits.max_json_depth, 9);
+        }
+
+        #[test]
+        fn py_limits_validates_and_defaults() {
+            for timeout in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let error = PyLimits::new(None, None, None, Some(timeout))
+                    .err()
+                    .unwrap();
+                assert!(error.to_string().contains("procedure_timeout"));
+            }
+            let defaults = PyLimits::new(None, None, None, None).unwrap();
+            let protocol_defaults = protocol::Limits::default();
+            assert_eq!(defaults.max_body_size(), protocol_defaults.max_body_size);
+            assert_eq!(defaults.max_batch_size(), protocol_defaults.max_batch_size);
+            assert_eq!(defaults.max_json_depth(), protocol_defaults.max_json_depth);
+            assert_eq!(defaults.procedure_timeout(), None);
+            let custom = PyLimits::new(Some(1), Some(2), Some(3), Some(4.5)).unwrap();
+            assert_eq!(custom.max_body_size(), 1);
+            assert_eq!(custom.max_batch_size(), 2);
+            assert_eq!(custom.max_json_depth(), 3);
+            assert_eq!(custom.procedure_timeout(), Some(4.5));
+        }
+
+        #[test]
+        fn extra_from_python_merges_dicts_and_wraps_scalars() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let payload = PyDict::new(py);
+                payload.set_item("code", "SPOOFED").unwrap();
+                payload.set_item("httpStatus", 999).unwrap();
+                payload.set_item("kept", true).unwrap();
+                let extra = extra_from_python(&payload.into_any()).unwrap();
+                assert!(!extra.contains_key("code"));
+                assert!(!extra.contains_key("httpStatus"));
+                assert_eq!(extra["kept"], serde_json::json!(true));
+
+                let scalar = 3_i64.into_pyobject(py).unwrap().into_any();
+                let extra = extra_from_python(&scalar).unwrap();
+                assert_eq!(extra["data"], serde_json::json!(3));
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn call_result_error_merges_data_into_the_envelope() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let payload = PyDict::new(py);
+                payload.set_item("hint", "check id").unwrap();
+                let result = PyCallResult::error(
+                    "missing".to_owned(),
+                    "NOT_FOUND",
+                    -32004,
+                    404,
+                    "NOT_FOUND",
+                    Some(&payload.into_any()),
+                )
+                .unwrap();
+                let (status, body) = build_response(py, vec![Py::new(py, result).unwrap()], false);
+                assert_eq!(status, 404);
+                let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+                assert_eq!(body["error"]["data"]["hint"], "check id");
+                assert_eq!(body["error"]["data"]["code"], "NOT_FOUND");
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn sse_encoder_static_frames() {
+            assert_eq!(
+                PySseEncoder::connected(),
+                b"event: connected\ndata: {}\n\n\n"
+            );
+            assert_eq!(PySseEncoder::ping(), b"event: ping\ndata: \n\n\n");
+            assert_eq!(PySseEncoder::close(), b"event: return\ndata: \n\n\n");
+        }
+
+        #[test]
+        fn sse_encoder_data_tracks_and_restores_ids() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let encoder = PySseEncoder::new(Some("4".to_owned()));
+                let value = PyDict::new(py);
+                value.set_item("tick", 1).unwrap();
+                let value = value.into_any();
+                let frame = encoder.data(py, &value, Some("5")).unwrap();
+                assert_eq!(frame, b"data: {\"tick\":1}\nid: 5\n\n\n");
+                // An untracked event after a known id gets an empty id plus a
+                // `restore-id` frame carrying the last tracked id.
+                let frame = encoder.data(py, &value, None).unwrap();
+                assert_eq!(
+                    frame,
+                    b"data: {\"tick\":1}\nid: \n\n\nevent: restore-id\ndata: \nid: 5\n\n\n"
+                );
+
+                let bad = PyTuple::new(py, [1]).unwrap().into_any();
+                assert!(encoder.data(py, &bad, None).is_err());
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn sse_encoder_serialized_error_frames() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let frame = PySseEncoder::serialized_error("gone", "NOT_FOUND", None).unwrap();
+                let text = String::from_utf8(frame).unwrap();
+                assert!(text.starts_with("event: serialized-error\n"));
+                assert!(text.contains("\"code\":\"NOT_FOUND\""));
+
+                let payload = PyDict::new(py);
+                payload.set_item("hint", "h").unwrap();
+                let frame =
+                    PySseEncoder::serialized_error("gone", "NOT_FOUND", Some(&payload.into_any()))
+                        .unwrap();
+                assert!(String::from_utf8(frame).unwrap().contains("\"hint\":\"h\""));
+
+                assert!(PySseEncoder::serialized_error("m", "NOT_A_CODE", None).is_err());
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn watcher_reports_changes_and_idle_timeouts() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                assert!(PyWatcher::new(vec!["/nonexistent/trpc-py-watch".to_owned()]).is_err());
+                let dir =
+                    std::env::temp_dir().join(format!("trpc-py-watch-{}", std::process::id()));
+                std::fs::create_dir_all(&dir).unwrap();
+                let watcher = PyWatcher::new(vec![dir.display().to_string()]).unwrap();
+                // Drain startup noise; a quiet channel must then report None.
+                let deadline = Instant::now() + Duration::from_secs(15);
+                loop {
+                    match watcher.next(py, Some(1000), 50).unwrap() {
+                        None => break,
+                        Some(_) => {
+                            assert!(
+                                Instant::now() < deadline,
+                                "watcher startup events never settled"
+                            );
+                        }
+                    }
+                }
+                std::fs::write(dir.join("event.py"), b"x = 1").unwrap();
+                let mut seen = false;
+                let deadline = Instant::now() + Duration::from_secs(15);
+                while !seen && Instant::now() < deadline {
+                    if let Some(paths) = watcher.next(py, Some(2000), 50).unwrap() {
+                        seen = paths.iter().any(|path| path.ends_with("event.py"));
+                    }
+                }
+                assert!(seen);
+                std::fs::remove_dir_all(&dir).ok();
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn parse_request_get_post_batch_and_errors() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let limits = Py::new(
+                    py,
+                    PyLimits {
+                        body_size: 1024,
+                        batch_size: 8,
+                        json_depth: 8,
+                        procedure_timeout: None,
+                    },
+                )
+                .unwrap();
+                let limits = limits.bind(py);
+
+                let request =
+                    parse_request(py, "get", "ping", "input=%7B%22x%22%3A1%7D", None, limits)
+                        .unwrap();
+                let request = request.bind(py).borrow();
+                assert!(!request.batched());
+                let calls = request.calls(py);
+                assert_eq!(calls.len(), 1);
+                let call = calls[0].bind(py).borrow();
+                assert_eq!(call.path(), "ping");
+                let input = call.input(py);
+                assert_eq!(
+                    input
+                        .bind(py)
+                        .get_item("x")
+                        .unwrap()
+                        .extract::<i64>()
+                        .unwrap(),
+                    1
+                );
+
+                let body = PyBytes::new(py, br#"{"y":2}"#);
+                let request = parse_request(py, "POST", "mut", "", Some(&body), limits).unwrap();
+                assert_eq!(request.bind(py).borrow().calls(py).len(), 1);
+
+                let batched = parse_request(
+                    py,
+                    "GET",
+                    "a,b",
+                    "batch=1&input=%7B%220%22%3A%7B%7D%2C%221%22%3A%7B%7D%7D",
+                    None,
+                    limits,
+                )
+                .unwrap();
+                let batched = batched.bind(py).borrow();
+                assert!(batched.batched());
+                assert_eq!(batched.calls(py).len(), 2);
+
+                assert!(parse_request(py, "DELETE", "/x", "", None, limits).is_err());
+                let garbage = PyBytes::new(py, b"not json");
+                let error = parse_request(py, "POST", "/x", "", Some(&garbage), limits)
+                    .err()
+                    .unwrap();
+                assert!(error.is_instance_of::<TrpcProtocolError>(py));
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn build_response_serializes_mixed_results() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let ok = PyCallResult::ok(&5_i64.into_pyobject(py).unwrap().into_any()).unwrap();
+                let (status, body) = build_response(py, vec![Py::new(py, ok).unwrap()], false);
+                assert_eq!(status, 200);
+                let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+                assert_eq!(body, serde_json::json!({"result": {"data": 5}}));
+
+                let error = PyCallResult::error(
+                    "missing".to_owned(),
+                    "NOT_FOUND",
+                    -32004,
+                    404,
+                    "NOT_FOUND",
+                    None,
+                )
+                .unwrap();
+                let (status, body) = build_response(py, vec![Py::new(py, error).unwrap()], true);
+                assert_eq!(status, 404);
+                let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+                assert_eq!(body[0]["error"]["data"]["code"], "NOT_FOUND");
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn python_to_json_rejects_unsupported_types_and_huge_ints() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let tuple = PyTuple::new(py, [1, 2]).unwrap().into_any();
+                let error = python_to_json_value(&tuple, 0).unwrap_err();
+                assert!(error.is_instance_of::<PyTypeError>(py));
+
+                let bytes = PyBytes::new(py, b"raw").into_any();
+                assert!(python_to_json_value(&bytes, 0).is_err());
+
+                let huge = py.eval(c"2 ** 100", None, None).unwrap();
+                let error = python_to_json_value(&huge, 0).unwrap_err();
+                assert!(error.to_string().contains("outside the JSON integer range"));
+            })
+            .expect("Python interpreter must be initialized for tests");
+        }
+
+        #[test]
+        fn module_init_registers_all_exports() {
+            Python::initialize();
+            Python::try_attach(|py| {
+                let module = PyModule::new(py, "_core_test").unwrap();
+                #[allow(clippy::used_underscore_items)]
+                _core(&module).unwrap();
+                for name in [
+                    "__version__",
+                    "TrpcProtocolError",
+                    "Limits",
+                    "ParsedCall",
+                    "ParsedRequest",
+                    "CallResult",
+                    "SseEncoder",
+                    "Watcher",
+                    "parse_request",
+                    "build_response",
+                    "serve",
+                ] {
+                    assert!(module.getattr(name).is_ok(), "missing export {name}");
+                }
+            })
+            .expect("Python interpreter must be initialized for tests");
         }
 
         #[test]
