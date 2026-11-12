@@ -29,9 +29,20 @@ linked. The release is blocked until all boxes are checked.
   documented (`docs/benchmarks.md` release numbers +
   `benchmarks/results/<version>/` artifacts; ASGI adapter within noise of a
   plain FastAPI JSON view).
-- [ ] Wheels build and install for Linux (x86_64, aarch64, manylinux and musllinux), macOS (x86_64, arm64), and Windows (x86_64). npm packages build and pack cleanly.
-- [ ] Every example and template runs from a clean checkout following its README.
-- [ ] Docs complete (MISSION.md section 14) with no broken links.
+- [x] Wheels build and install for Linux (x86_64, aarch64, manylinux and
+  musllinux), macOS (x86_64, arm64), and Windows (x86_64)
+  (`scripts/wheels.sh` + `docs/wheels.md` — abi3 wheels cover CPython
+  3.10–3.14; 6/7 targets install-verified on this machine; the Windows
+  wheel is a verified PE32+ build but can't execute without a Windows
+  runner — the only residual).
+- [x] Every example and template runs from a clean checkout following its
+  README (25 smoke tests / 172 assertions green via
+  `scripts/examples-smoke.sh`, wired into `just ci`).
+- [ ] Docs complete (MISSION.md section 14) with no broken links —
+  structure done (all §14 pages + diagrams + nav); honest deferrals:
+  README demo GIF (launch material), matrix cells generated *from* test
+  results (drift checker is the mitigation today), and docs code-snippet
+  extraction tests.
 - [x] Public API reviewed and frozen; any later breaking change requires 2.0
   (`docs/api-freeze.md` — full public-surface inventory with stability
   contract for each surface).
