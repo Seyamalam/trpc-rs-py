@@ -21,7 +21,7 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 pyo3 = "0.29"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
-trpc-core = { path = "../trpc-core", version = ">=0.7.0-0" }
+trpc-core = { path = "../trpc-core" }
 
 [features]
 # Enabled by maturin at build time so `cargo test` can link libpython normally.
