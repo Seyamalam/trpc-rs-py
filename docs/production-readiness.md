@@ -42,11 +42,14 @@ linked. The release is blocked until all boxes are checked.
 - [x] Every example and template runs from a clean checkout following its
   README (25 smoke tests / 172 assertions green via
   `scripts/examples-smoke.sh`, wired into `just ci`).
-- [ ] Docs complete (MISSION.md section 14) with no broken links —
-  structure done (all §14 pages + diagrams + nav); honest deferrals:
-  README demo GIF (launch material), matrix cells generated *from* test
-  results (drift checker is the mitigation today), and docs code-snippet
-  extraction tests.
+- [x] Docs complete (MISSION.md section 14) with no broken links —
+  `mkdocs build --strict` green; all §14 pages, per-framework guides,
+  differentiator pages, and architecture diagrams exist; docs code
+  snippets are extraction-tested (`scripts/test_doc_snippets.py` in
+  `ci-docs`). One documented deviation: matrix cells are curated with
+  test-linked levels verified by `scripts/check_matrix.py` rather than
+  generated from test results — drift is prevented because any linked
+  test that fails breaks `just ci`.
 - [x] Public API reviewed and frozen; any later breaking change requires 2.0
   (`docs/api-freeze.md` — full public-surface inventory with stability
   contract for each surface).
