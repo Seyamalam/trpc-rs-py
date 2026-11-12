@@ -32,10 +32,14 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 //    ^? string
 ```
 
-> **Status: 0.2.0 released; 0.3.0 in development.** Queries, mutations,
-> batching, SSE subscriptions, live type sync (`trpc-py dev`), REST +
-> OpenAPI output, and starter templates (`trpc-py init`) are in; the 0.3.0
-> launch adds AI streaming helpers and examples. See [`MISSION.md`](MISSION.md)
+![Live type sync — saving `server.py` regenerates `app-router.d.ts`](live-types.gif)
+
+> **Status: 0.8.0 released; 0.9.x release hardening toward `1.0.0-beta`.**
+> Queries, mutations, batching, SSE subscriptions, live type sync
+> (`trpc-py dev`), typed errors, AI streaming helpers, REST + OpenAPI
+> output, CORS/CSRF/rate-limit/auth helpers, a standalone server
+> (`trpc-py serve`), a Python client, and starter templates
+> (`trpc-py init`) all ship today. See [`MISSION.md`](MISSION.md)
 > for the full roadmap and [`docs/feature-matrix.md`](docs/feature-matrix.md)
 > for feature status.
 
