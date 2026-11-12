@@ -129,7 +129,8 @@ export function migrationLink<TRouter extends AnyRouter = AnyRouter>(
   });
 }
 
-export type RootOf<TRouter extends AnyRouter> = TRouter["_def"]["_config"]["$types"];
+export type RootOf<TRouter extends AnyRouter> =
+  TRouter["_def"]["_config"]["$types"];
 
 export type RecordOf<TRouter extends AnyRouter> = TRouter["_def"]["record"];
 
