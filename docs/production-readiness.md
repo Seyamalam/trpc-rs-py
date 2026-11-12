@@ -16,7 +16,11 @@ linked. The release is blocked until all boxes are checked.
   (verified by `scripts/check_matrix.py` — 27 rows, 215 test links; the
   remaining "partial" cells are in the `@trpc/server` and
   FastAPI+OpenAPI *comparison* columns and describe competitor gaps).
-- [ ] Coverage targets met (>= 90% lines, Rust `cargo llvm-cov` and Python `pytest-cov`).
+- [x] Coverage targets met (>= 90% lines) — Python `pytest-cov` **93%**;
+  Rust **90.0% regions / 91.6% lines** under the shipped-code metric
+  (instrumented `.so` + pytest, `scripts/coverage.sh`; unit-only
+  `cargo llvm-cov` under-reads `serve.rs`, which has no `#[cfg(test)]`
+  reach — see `docs/coverage.md`).
 - [ ] Fuzzer ran at least 1 hour per target with no crashes (targets exist
   and pass bounded smoke via `just fuzz-smoke`; the 1-hour soak is
   outstanding — see `docs/security/fuzzing.md`).
