@@ -821,6 +821,103 @@ mod tests {
         assert_eq!(value[1]["error"]["code"], -32004);
     }
 
+    #[test]
+    fn rejects_empty_path_and_empty_batch_segment() {
+        assert_eq!(
+            parse_request(get("", ""), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            parse_request(get("a,,b", "batch=1&input=%7B%7D"), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn rejects_get_request_with_body() {
+        let request = Request {
+            method: HttpMethod::Get,
+            path: "x",
+            query: "",
+            body: b"{}",
+            content_length: Some(2),
+        };
+        assert_eq!(
+            parse_request(request, Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn rejects_non_numeric_batch_input_keys() {
+        assert_eq!(
+            parse_request(post("a,b", "batch=1", br#"{"x":1}"#), Limits::default())
+                .unwrap_err()
+                .code_name,
+            "BAD_REQUEST"
+        );
+    }
+
+    #[test]
+    fn lowercase_percent_escapes_decode() {
+        let parsed = parse_request(get("x", "input=%7b%22x%22%3a1%7d"), Limits::default()).unwrap();
+        assert_eq!(parsed.calls[0].input["x"], 1);
+    }
+
+    #[test]
+    fn deeply_nested_array_input_is_bad_request() {
+        // The object branch of the depth check is covered elsewhere; this is
+        // the array branch.
+        let error = parse_request(
+            post("x", "", b"[[[1]]]"),
+            Limits {
+                max_json_depth: 1,
+                ..Limits::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code_name, "BAD_REQUEST");
+        assert_eq!(error.message, "JSON nesting depth exceeded");
+    }
+
+    #[test]
+    fn route_reports_not_found_for_unknown_path() {
+        let router = Router::new();
+        let error = router.route("missing", HttpMethod::Get).unwrap_err();
+        assert_eq!(error.code_name, "NOT_FOUND");
+        assert!(error.message.contains("\"missing\""));
+    }
+
+    #[test]
+    fn batch_status_prefers_server_error() {
+        let response = build_response(
+            vec![
+                Err(TrpcError::new(ErrorCode::NotFound, "missing")),
+                Ok(json::json!(1)),
+                Err(TrpcError::new(ErrorCode::InternalServerError, "boom")),
+            ],
+            true,
+        );
+        assert_eq!(response.http_status, 500);
+        let value: json::Value = json::parse(response.body.as_bytes()).unwrap();
+        assert_eq!(value[0]["error"]["code"], -32004);
+        assert_eq!(value[2]["error"]["code"], -32603);
+    }
+
+    #[test]
+    fn empty_single_result_batch_is_bad_request() {
+        let response = build_response(vec![], false);
+        assert_eq!(response.http_status, 400);
+        let value: json::Value = json::parse(response.body.as_bytes()).unwrap();
+        assert_eq!(value["error"]["data"]["code"], "BAD_REQUEST");
+    }
+
     fn arbitrary_json() -> impl proptest::strategy::Strategy<Value = json::Value> {
         use proptest::prelude::{Just, Strategy, any, prop_oneof};
         let leaf = prop_oneof![

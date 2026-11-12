@@ -280,6 +280,13 @@ mod tests {
     }
 
     #[test]
+    fn display_matches_wire_name() {
+        for &(code, _, _) in OFFICIAL {
+            assert_eq!(code.to_string(), code.name());
+        }
+    }
+
+    #[test]
     fn envelope_shape() {
         let err = TrpcError::new(ErrorCode::NotFound, "No procedure found on path \"x\"");
         let json = crate::json::parse(err.to_envelope().as_bytes()).unwrap();

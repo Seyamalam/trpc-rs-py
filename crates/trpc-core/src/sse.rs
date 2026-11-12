@@ -235,6 +235,23 @@ mod tests {
     }
 
     #[test]
+    fn event_field_rejects_injection() {
+        assert!(encode_frame(Some("data\nevil"), "1", None).is_err());
+    }
+
+    #[test]
+    fn failed_tracked_send_keeps_resume_id() {
+        let mut encoder = SseEncoder::new(Some("9".to_owned()));
+        assert!(encoder.data("1", Some("bad\nid")).is_err());
+        // The failed send must not clobber the resume point.
+        let frame = encoder.data("2", None).unwrap();
+        assert_eq!(
+            frame,
+            "data: 2\nid: \n\n\nevent: restore-id\ndata: \nid: 9\n\n\n"
+        );
+    }
+
+    #[test]
     fn serialized_error_frame_carries_flat_shape() {
         let error = TrpcError::new(ErrorCode::NotFound, "missing");
         let frame = SseEncoder::serialized_error(&error).unwrap();

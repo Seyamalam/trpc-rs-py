@@ -198,4 +198,76 @@ mod tests {
         let error = DirectoryWatcher::new(&[missing]).err().unwrap();
         assert_eq!(error.code_name, "INTERNAL_SERVER_ERROR");
     }
+
+    #[test]
+    fn debounce_cap_returns_burst_as_one_batch() {
+        let dir = std::env::temp_dir().join(format!("trpc-watch-cap-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let watcher = watcher_for(&dir);
+
+        // Writes sustained past MAX_DEBOUNCE_WINDOW must still terminate the
+        // batch via the cap instead of starving the caller.
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let writer = {
+            let dir = dir.clone();
+            let stop = std::sync::Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let mut counter = 0_u32;
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = fs::write(
+                        dir.join(format!("f{}.py", counter % 8)),
+                        counter.to_string(),
+                    );
+                    counter += 1;
+                }
+            })
+        };
+        let batch = watcher
+            .next_batch(Duration::from_secs(15), Duration::from_millis(50))
+            .unwrap()
+            .expect("a batch arrives before the wait expires");
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        writer.join().unwrap();
+        assert!(!batch.is_empty());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn remove_events_are_relevant() {
+        let dir = std::env::temp_dir().join(format!("trpc-watch-rm-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("gone.py");
+        fs::write(&file, b"x = 1").unwrap();
+        let watcher = watcher_for(&dir);
+        fs::remove_file(&file).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            match watcher
+                .next_batch(Duration::from_secs(2), Duration::from_millis(50))
+                .unwrap()
+            {
+                Some(paths) if paths.iter().any(|path| path.ends_with("gone.py")) => break,
+                Some(_) | None => assert!(Instant::now() < deadline, "removal never reported"),
+            }
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn irrelevant_event_kinds_are_dropped() {
+        let mut paths = BTreeSet::new();
+        let event = Event::new(EventKind::Access(notify::event::AccessKind::Read))
+            .add_path(PathBuf::from("/tmp/x.py"));
+        collect(Ok(event), &mut paths).unwrap();
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn backend_errors_propagate() {
+        let mut paths = BTreeSet::new();
+        let error = collect(Err(notify::Error::generic("stream died")), &mut paths)
+            .expect_err("backend error surfaces");
+        assert_eq!(error.code_name, "INTERNAL_SERVER_ERROR");
+        assert!(error.message.contains("stream died"));
+    }
 }
