@@ -35,15 +35,13 @@ echo "=== 2/4 instrumented extension build ==="
 RUSTFLAGS="-Cinstrument-coverage" \
 LLVM_PROFILE_FILE="$PWD/$PROFRAW/build-%p-%m.profraw" \
     uv run maturin develop >/dev/null
-nm "$SO" | grep -q __llvm_prf || { echo "instrumented build failed (.so has no profile counters)"; exit 1; }
+otool -l "$SO" | grep -q "__LLVM_COV" || {
+    echo "instrumented build failed (.so has no __LLVM_COV segment)"; exit 1;
+}
 
 echo "=== 3/4 pytest under instrumentation ==="
 LLVM_PROFILE_FILE="$PWD/$PROFRAW/pytest-%p-%m.profraw" \
-    uv run pytest -q --ignore=tests/test_serve.py 2>&1 | tail -5 || true
-# test_serve spawns a real server on ports; include it but tolerate flakes
-# by running it separately without failing the whole report.
-LLVM_PROFILE_FILE="$PWD/$PROFRAW/serve-%p-%m.profraw" \
-    uv run pytest -q tests/test_serve.py 2>&1 | tail -5 || true
+    uv run pytest -q 2>&1 | tail -5
 
 "$PROFDATA" merge -sparse "$PROFRAW"/*.profraw -o "$OUT/pytest.profdata"
 # Integration coverage: just the extension .so.
