@@ -5,8 +5,10 @@
 
 ## Current version and milestone
 
-- Version: **0.9.0 released** (`v0.9.0` tag; 8 platform wheels + sdist on PyPI);
-  **1.0.0-beta.1 is the next milestone — all 12 production-readiness items are checked.**
+- Version: **1.0.0-beta.1 released** (`v1.0.0-beta.1` tag; 8 wheels + sdist on
+  PyPI as `1.0.0b1` — stable `0.9.0` remains the default install; the beta is
+  opt-in via `pip install trpc-rs-py==1.0.0b1`). Public API frozen under
+  `docs/api-freeze.md`; all 12 production-readiness items checked.
 - 0.9.x state (see `docs/production-readiness.md` — 12/12 items checked):
   - Done: §9 examples complete (25 smokes/172 assertions in `just ci`),
     cross-platform wheels (`scripts/wheels.sh`, 7 targets, 6
