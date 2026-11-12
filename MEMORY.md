@@ -5,11 +5,28 @@
 
 ## Current version and milestone
 
-- Version: **0.6.0 released** (`v0.6.0` tag, release commit + benchmark
-  artifacts on `main`); prior: 0.5.0 (`v0.5.0`, artifacts `0e91126`).
-  All 0.6.0 scope shipped — context, middleware chain, security
-  wrappers, tracing, testing clients, playground panel, AI SDK
-  helpers, CLI `--json`.
+- Version: **0.8.0 released** (`v0.8.0` tag, wheel+sdist on PyPI);
+  **0.9.x release hardening toward `1.0.0-beta.1` in progress.**
+- 0.9.x state (see `docs/production-readiness.md` — 10/11 items checked):
+  - Done: §9 examples complete (25 smokes/172 assertions in `just ci`),
+    cross-platform wheels (`scripts/wheels.sh`, 7 targets, 6
+    install-verified, abi3 = CPython 3.10–3.14), Python coverage 93%,
+    Rust coverage 90.0% regions/91.6% lines (instrumented-.so +
+    pytest via `scripts/coverage.sh`), 1h×4 fuzz soak (~424M runs, zero
+    crashes), §14 docs (getting-started/concepts/guides/differentiator
+    pages + architecture diagrams), api-freeze inventory, matrix drift
+    checker (`scripts/check_matrix.py`), `nest()` full-path fix.
+  - Open: docs-complete item has 2 noted deferrals (matrix cells
+    generated *from* test results — drift checker is the mitigation;
+    docs snippet extraction testing — `scripts/test_doc_snippets.py`
+    in flight). Windows wheel build-only (no local runner).
+- Key environment notes: `TRPC_RS_PY_PRODUCTION` (NOT
+  `TRPC_PY_PRODUCTION`) is the prod env var; `cargo fuzz run` targets
+  live in `fuzz/` (nightly toolchain); `maturin develop` default build
+  has `__LLVM_COV` segments only under `RUSTFLAGS=-Cinstrument-coverage`.
+- Prior milestones: 0.7.0 (standalone server, Python client, ADRs
+  0013/0014) → 0.8.0 (security: threat model, audits, fuzzing,
+  `procedure_timeout`, ADR 0015) → 0.9.x hardening.
 - Repo: https://github.com/Seyamalam/trpc-rs-py (public), branch `main`, no hosted CI.
 - 0.6.0 detail: ADR 0011 landed as two commits — context `1d25ce9`
   (`RequestContext`, `context_factory` on all 5 adapters, leading `ctx`

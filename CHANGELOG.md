@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `nest()` now rewrites `Procedure.path` to the full dotted path, so
+  `error.data.path`, middleware `Call.path`, and timeout messages report
+  `posts.by_id` instead of `by_id` — matching the official `getErrorShape`.
+- Feature matrix: stripped two phantom trailing cells per row.
+
+### Added
+
+- Combination + feature examples (MISSION §9): `fastapi-react-vite`
+  (`@trpc/react-query`), `flask-nextjs`, `django-vanilla-ts`,
+  `react-zod-form`, `feature-auth-context`, `feature-batching`,
+  `feature-error-handling`, `feature-typed-errors`, `feature-pydantic-vs`,
+  `standalone-server`, `python-client`, `rest-and-trpc`,
+  `merged-routers`, `shared-router` — all smoke-tested in `just ci`.
+- `scripts/wheels.sh` — cross-platform wheel matrix (abi3, CPython
+  3.10–3.14): 7 targets, 6 install-verified (`docs/wheels.md`).
+- `scripts/coverage.sh` — unit (`cargo llvm-cov`) + integration
+  (instrumented `.so` driven by pytest) coverage; `docs/coverage.md`.
+- `scripts/check_matrix.py` — feature-matrix drift guard wired into
+  `ci-docs` (27 rows, 215 test links).
+- TypeDoc for `packages/link` and `cargo doc` in the docs gate.
+- Docs: getting-started, core concepts, starter, per-framework guides,
+  TypeScript client guide, live-type-sync, AI streaming, Zod codegen,
+  deployment, troubleshooting, versioning, API reference (mkdocstrings),
+  API freeze inventory, plus architecture diagrams (FFI, batching,
+  subscription/cancellation, type sync, migration routing).
+- README demo GIF (`live-types.gif`, recorded via
+  `vhs docs/launch/live-types.tape`).
+
 ## [0.8.0] - 2026-11-11
 
 ### Added
