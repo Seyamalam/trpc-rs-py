@@ -49,9 +49,12 @@ ci-ts:
 ci-examples:
     ./scripts/examples-smoke.sh
 
-# Step 10: docs build (warnings fail).
+# Step 10: docs build (warnings fail) + rustdoc + TypeDoc + matrix drift check.
 ci-docs:
     uv run mkdocs build --strict
+    cargo doc --no-deps --workspace
+    cd packages/link && pnpm run docs
+    uv run python scripts/check_matrix.py
 
 # Benchmark suite (MISSION.md section 10): raw JSON results + SVG charts.
 bench:

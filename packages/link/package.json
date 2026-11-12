@@ -18,7 +18,8 @@
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "docs": "typedoc --out docs --entryPoints src --name trpc-rs-py-link"
   },
   "peerDependencies": {
     "@trpc/client": "^11.0.0",
@@ -29,6 +30,7 @@
     "@trpc/server": "11.25.0",
     "@types/node": "^24.10.0",
     "prettier": "^3.6.0",
+    "typedoc": "^0.28.20",
     "typescript": "^5.9.0"
   },
   "license": "Apache-2.0"

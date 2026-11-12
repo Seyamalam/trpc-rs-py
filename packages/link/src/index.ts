@@ -129,9 +129,9 @@ export function migrationLink<TRouter extends AnyRouter = AnyRouter>(
   });
 }
 
-type RootOf<TRouter extends AnyRouter> = TRouter["_def"]["_config"]["$types"];
+export type RootOf<TRouter extends AnyRouter> = TRouter["_def"]["_config"]["$types"];
 
-type RecordOf<TRouter extends AnyRouter> = TRouter["_def"]["record"];
+export type RecordOf<TRouter extends AnyRouter> = TRouter["_def"]["record"];
 
 /**
  * Deep-merges two router records; the Python record wins on every conflict.
@@ -139,7 +139,7 @@ type RecordOf<TRouter extends AnyRouter> = TRouter["_def"]["record"];
  * Values carrying a `_def` (procedures and routers) are leaves — the Python
  * side replaces them outright. Plain nested records merge recursively.
  */
-type MergedRecord<A extends RouterRecord, B extends RouterRecord> = {
+export type MergedRecord<A extends RouterRecord, B extends RouterRecord> = {
   [K in keyof A | keyof B]: K extends keyof B
     ? K extends keyof A
       ? A[K] extends { _def: unknown }
@@ -164,7 +164,7 @@ type MergedRecord<A extends RouterRecord, B extends RouterRecord> = {
  * transformer, with `errorShape` widened to a union so errors from either
  * side (including Python's `AppRouterErrorShape` union) type-check.
  */
-type MergedRootTypes<TNode extends AnyRouter, TPy extends AnyRouter> = {
+export type MergedRootTypes<TNode extends AnyRouter, TPy extends AnyRouter> = {
   ctx: RootOf<TNode>["ctx"];
   meta: RootOf<TNode>["meta"];
   transformer: RootOf<TNode>["transformer"];
