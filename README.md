@@ -32,7 +32,7 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 //    ^? string
 ```
 
-![Live type sync — saving `server.py` regenerates `app-router.d.ts`](live-types.gif)
+![Live type sync — saving `server.py` regenerates `app-router.d.ts`](https://raw.githubusercontent.com/Seyamalam/trpc-rs-py/main/live-types.gif)
 
 > **Status: `1.0.0-beta.1` released — public API frozen; wheels for Linux, macOS, and Windows on PyPI.**
 > Queries, mutations, batching, SSE subscriptions, live type sync

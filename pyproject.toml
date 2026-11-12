@@ -4,9 +4,13 @@ build-backend = "maturin"
 
 [project]
 name = "trpc-rs-py"
+description = "The Python backend for your tRPC app — end-to-end types that update live."
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2.7,<3"]
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
