@@ -61,6 +61,7 @@ table shared by every framework:
 Optional extras on the same app:
 
 ```python
+# snippet: skip — excerpt; needs app and router from server.py above
 from trpc_rs_py import mount_rest
 
 app.mount("/api", mount_rest(router))      # REST + OpenAPI for RestRoute procs
@@ -72,6 +73,7 @@ including lifespan and websockets — untouched. Use it when you need
 `rest_path=` on the same wrapper or middleware-style composition:
 
 ```python
+# snippet: skip — excerpt; needs app and router from server.py above
 from trpc_rs_py import attach
 
 application = attach(app, router, path="/trpc", rest_path="/api")
@@ -90,6 +92,7 @@ gunicorn server:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000
 ```
 
 ```python
+# snippet: skip — excerpt; needs app, mount and router from above
 app.mount("/trpc", mount(router, production=True))
 ```
 

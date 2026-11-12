@@ -8,12 +8,13 @@ to stand up. The package itself stays dependency-free; the framework
 wrappers import their client lazily.
 
 ```python
+# snippet: skip — excerpt; needs the test router (the ... in the assert is illustrative)
 from trpc_rs_py.testing import test_client
 
 client = test_client(router)
 
 assert client.query("echo", {"message": "hi"}) == "echo: hi"
-assert client.mutation("posts.create", {"title": "t"}) == {"title": "t", ...}
+assert client.mutation("posts.create", {"title": "t"})["title"] == "t"
 ```
 
 Each call runs the app coroutine on a fresh `asyncio.run` loop with
@@ -45,6 +46,7 @@ yields a `TrpcTestClientError` **instance** in the list (not raised), so
 partial failures are inspectable:
 
 ```python
+# snippet: skip — excerpt; needs client and TrpcTestClientError from above
 results = client.batch([{"path": "ping"}, {"path": "boom"}])
 assert results[0] == "pong"
 assert isinstance(results[1], TrpcTestClientError)
@@ -58,6 +60,7 @@ Raised by `query`/`mutation`/`subscribe` and returned per-call by
 `path`/`httpStatus`/typed extras), `http_status`.
 
 ```python
+# snippet: skip — excerpt; needs pytest, the client and TrpcTestClientError
 with pytest.raises(TrpcTestClientError) as excinfo:
     client.query("missing")
 assert excinfo.value.code == "NOT_FOUND"
@@ -77,6 +80,7 @@ running the adapter's real disconnect path), or `timeout` seconds pass
 (default 30 — covers generators blocked mid-yield):
 
 ```python
+# snippet: skip — excerpt; needs the test client from above
 events = client.subscribe("ticks", {"count": 2})
 assert [e.data for e in events] == [{"n": 0}, {"n": 1}]
 
@@ -89,6 +93,7 @@ For fixture parity with a real deployment, the wrappers return each
 framework's own test client — real URLs in, raw envelopes out:
 
 ```python
+# snippet: skip — excerpt; needs the router from your test suite
 from trpc_rs_py.testing import flask_test_client, django_test_client
 
 client = flask_test_client(router)              # werkzeug Client

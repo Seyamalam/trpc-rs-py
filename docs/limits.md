@@ -34,6 +34,7 @@ A hung handler pins a worker or task indefinitely. Setting
 `procedure_timeout` wraps each handler invocation in `asyncio.wait_for`:
 
 ```python
+# snippet: skip — excerpt; needs mount, router and Limits imported
 app = mount(router, limits=Limits(procedure_timeout=30.0))
 ```
 
@@ -71,6 +72,7 @@ Semantics:
 SSE caps are **mount kwargs**, not `Limits` fields:
 
 ```python
+# snippet: skip — excerpt; needs mount and router imported
 app = mount(router, sse_ping_interval=10.0, max_sse_event_size=512 * 1024)
 ```
 

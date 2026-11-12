@@ -77,6 +77,7 @@ stream, disconnects noticed on write. Set `sse_ping_interval` so dropped
 connections are noticed on the next write.
 
 ```python
+# snippet: skip — needs the myapp.trpc module from your project
 # urls.py
 from django.urls import path
 from trpc_rs_py.django import trpc_view
@@ -95,6 +96,7 @@ backpressure and no extra threads. Django also runs it correctly under WSGI,
 but the sync view is cheaper there.
 
 ```python
+# snippet: skip — excerpt; needs path and router from the project urls.py
 from trpc_rs_py.django import trpc_view_async
 
 urlpatterns = [path("trpc/<path:trpc_path>", trpc_view_async(router, production=True))]
@@ -122,7 +124,12 @@ no uvicorn, no framework:
 
 ```bash
 trpc-py serve --app myapp.server:router --host 0.0.0.0 --port 8000 --production
-# or from Python:
+```
+
+or from Python:
+
+```python
+# snippet: skip — excerpt; needs the router from your app
 from trpc_rs_py.serve import serve
 serve(router, host="0.0.0.0", port=8000, production=True)
 ```
@@ -165,6 +172,7 @@ trpc-rs-py has no built-in health endpoint. Add a trivial query and point
 your orchestrator at it:
 
 ```python
+# snippet: skip — excerpt; needs the router defined in your app
 @router.query
 def health() -> bool:
     return True

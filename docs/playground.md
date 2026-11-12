@@ -7,6 +7,7 @@ their JSON schemas, calls procedures over the real tRPC wire protocol, and
 shows streaming subscriptions live via `EventSource` (MISSION 2.7).
 
 ```python
+# snippet: skip — excerpt; needs app, mount and router from your app
 app.mount("/trpc", mount(router))
 # open http://localhost:8000/trpc/panel in the browser
 ```
@@ -37,6 +38,7 @@ rule as the REST docs UI (MISSION section 7):
 | `False` | off | off |
 
 ```python
+# snippet: skip — excerpt; needs mount and router imported
 mount(router)                        # panel on (dev)
 mount(router, production=True)       # panel off
 mount(router, production=True, panel=True)  # panel on anyway
@@ -85,6 +87,7 @@ breaks over an unserializable annotation.
 works identically under FastAPI/Starlette, Flask/WSGI, and Django:
 
 ```python
+# snippet: skip — excerpt; needs the adapter helpers and router imported
 mount(router, panel=True)
 attach(app, router, panel=True)
 mount_wsgi(router, panel=True)

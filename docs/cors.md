@@ -22,6 +22,7 @@ covers every adapter (ADR 0010 — WSGI and Django run through the same
 ASGI app):
 
 ```python
+# snippet: skip — excerpt; needs starlette_app, router and path from your app
 from trpc_rs_py import Router, attach, mount, mount_rest, wsgi_from_asgi
 from trpc_rs_py.django import asgi_view
 from trpc_rs_py.cors import cors

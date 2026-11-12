@@ -48,6 +48,7 @@ a bare `Starlette()` instance — same `Mount` underneath.
 list for procedures carrying `rest=RestRoute(...)`:
 
 ```python
+# snippet: skip — excerpt; needs Starlette, Mount, mount and router from above
 from trpc_rs_py import RestRoute, mount_rest
 
 app = Starlette(
@@ -63,6 +64,7 @@ whole app, serves the configured prefix, and forwards everything else —
 lifespan and websockets included — to the wrapped Starlette app:
 
 ```python
+# snippet: skip — excerpt; needs app and router from server.py above
 from trpc_rs_py import attach
 
 application = attach(app, router, path="/trpc")

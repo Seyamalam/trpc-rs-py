@@ -95,6 +95,7 @@ the message.
 The helpers emit plain dicts, so a subscription can stream them too:
 
 ```python
+# snippet: skip — excerpt; needs the router and llm_reply from your app
 @router.subscription
 async def chat(prompt: str) -> AsyncIterator[object]:
     async for chunk in ai_message_stream(ai_text_stream(llm_reply(prompt))):

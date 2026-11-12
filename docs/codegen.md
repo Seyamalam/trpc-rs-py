@@ -11,6 +11,7 @@ generator cannot map raises `TypeError` naming the procedure.
 ## Usage
 
 ```python
+# snippet: skip — writes to ./src, which only exists in a scaffolded project
 from pathlib import Path
 
 from trpc_rs_py import Router, generate_types

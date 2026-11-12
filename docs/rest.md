@@ -40,6 +40,7 @@ Subscriptions cannot be served over REST.
 `mount_rest(router)` returns a pure-ASGI app; mount it under any prefix:
 
 ```python
+# snippet: skip — excerpt; needs app, mount, mount_rest and router
 app.mount("/trpc", mount(router))
 app.mount("/api", mount_rest(router, title="Blog API", version="1.0.0"))
 ```
@@ -55,6 +56,7 @@ This serves:
 For `attach` (middleware) setups, pass `rest_path`:
 
 ```python
+# snippet: skip — excerpt; needs attach, FastAPI and router imported
 app = attach(FastAPI(), router, path="/trpc", rest_path="/api")
 ```
 
@@ -94,6 +96,7 @@ surface can opt in — it uses FastAPI's documented `app.openapi` customization
 point:
 
 ```python
+# snippet: skip — excerpt; needs FastAPI and router imported
 from trpc_rs_py import merge_openapi
 
 app = FastAPI()

@@ -32,6 +32,7 @@ def create_post(title: str) -> Post:
 ```
 
 ```python
+# snippet: skip — needs the myapp.trpc module and a configured Django project
 # mysite/urls.py
 from django.contrib import admin
 from django.urls import path
@@ -59,6 +60,7 @@ takes. `prefix` changes the URL root (`/trpc/posts.by_id` → procedure
 ## Views directly
 
 ```python
+# snippet: skip — excerpt; needs the router from myapp/trpc.py
 from django.urls import path
 
 from trpc_rs_py.django import trpc_view, trpc_view_async
@@ -75,6 +77,7 @@ generic helpers: they turn any ASGI `http` app into a Django view, but
 capture the remainder under the name `path`:
 
 ```python
+# snippet: skip — excerpt; needs path and router from the project
 from trpc_rs_py import mount_rest
 from trpc_rs_py.django import asgi_view
 
@@ -100,6 +103,7 @@ event loop — SSE streams with pull-based backpressure and no worker
 threads:
 
 ```python
+# snippet: skip — excerpt; needs trpc_urlpatterns and router imported
 urlpatterns = [*trpc_urlpatterns(router, asynchronous=True)]
 ```
 

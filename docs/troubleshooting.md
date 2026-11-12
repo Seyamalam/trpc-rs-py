@@ -22,6 +22,7 @@ sync and async `Client.subscribe` implementations drain the body first, so
 you only hit this if you build on `httpx` yourself:
 
 ```python
+# snippet: skip — excerpt inside an async caller; http and url are its own
 async with http.stream("GET", url) as response:
     if response.status_code >= 400:
         await response.aread()          # drain before .json()
@@ -38,9 +39,10 @@ treated as the injected context object. A `ctx` anywhere else is an
 ordinary input parameter — it will be expected in the request input.
 
 ```python
+# snippet: skip — excerpt; needs router
 @router.query
-def me(ctx, user_id: int):        # ctx injected — OK
-def bad(context, user_id: int):   # 'context' is an input param — BAD
+def me(ctx, user_id: int): ...    # ctx injected — OK
+def bad(context, user_id: int): ...  # 'context' is an input param — BAD
 ```
 
 A keyword-only `ctx` (after `*args` or `*`) is injected as a keyword
@@ -61,6 +63,7 @@ By design: `panel=None` (the default) enables `{path}/panel` only when
 `production=False`. In production the panel is off unless you opt in:
 
 ```python
+# snippet: skip — excerpt; needs mount and router imported
 app = mount(router, production=True, panel=True)   # explicit opt-in
 ```
 
@@ -110,6 +113,7 @@ a yielded value serializing beyond it ends the stream with a
 larger events:
 
 ```python
+# snippet: skip — excerpt; needs mount and router imported
 app = mount(router, max_sse_event_size=8 * 1024 * 1024)
 ```
 

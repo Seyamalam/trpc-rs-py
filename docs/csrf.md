@@ -9,6 +9,7 @@ runs **before** dispatch: rejected requests never reach a handler.
 from trpc_rs_py import Router, mount
 from trpc_rs_py.csrf import csrf_protect
 
+router = Router()
 app = csrf_protect(mount(router), allowed_origins=["https://app.example.com"])
 ```
 
@@ -56,6 +57,7 @@ Non-`http` scopes (`websocket`, `lifespan`) pass through untouched.
 ## Every adapter
 
 ```python
+# snippet: skip — excerpt; needs app, router, ORIGINS and the imports
 # ASGI (FastAPI, Starlette, ...)
 app.mount("/trpc", csrf_protect(mount(router), allowed_origins=ORIGINS))
 
@@ -76,6 +78,7 @@ path("trpc/<path:path>", asgi_view(csrf_protect(mount(router, path=""), allowed_
 Wrap CSRF first, then CORS — `cors(csrf_protect(mount(...)), ...)`:
 
 ```python
+# snippet: skip — excerpt; needs router and the cors/csrf_protect imports
 app = cors(
     csrf_protect(mount(router), allowed_origins=["https://app.example.com"]),
     allow_origins=["https://app.example.com"],

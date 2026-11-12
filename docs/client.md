@@ -13,6 +13,7 @@ so the package stays dependency-free. Calling `create_async_client`
 without `httpx` installed raises `RuntimeError` naming the extra.
 
 ```python
+# snippet: skip — needs a live server on localhost:8000
 from trpc_rs_py.client import create_client
 
 with create_client("http://localhost:8000/trpc") as client:
@@ -21,6 +22,7 @@ with create_client("http://localhost:8000/trpc") as client:
 ```
 
 ```python
+# snippet: skip — async excerpt; needs a live server and httpx
 from trpc_rs_py.client import create_async_client  # pip install httpx
 
 async with create_async_client("http://localhost:8000/trpc") as client:
@@ -53,6 +55,7 @@ before judging the status. A top-level failure (mixed procedure kinds)
 raises instead.
 
 ```python
+# snippet: skip — excerpt; needs the client from the snippet above
 results = client.batch([{"path": "ping"}, {"path": "boom"}])
 assert results[0] == "pong"
 assert isinstance(results[1], TrpcClientError)
@@ -78,6 +81,7 @@ frame and raises `TrpcClientError`; control frames (`connected`, `ping`,
 `return`) are consumed silently.
 
 ```python
+# snippet: skip — excerpt; needs the subscribed client from above
 for event in client.subscribe("ticks", {"count": 5}):
     print(event.data, event.id)
 # resume after a drop:
@@ -111,6 +115,7 @@ class AppRouterClient:
 ```
 
 ```python
+# snippet: skip — needs the generated myapp.client module and a live server
 from myapp.client import AppRouterClient
 
 client = AppRouterClient(create_client("http://localhost:8000/trpc"))

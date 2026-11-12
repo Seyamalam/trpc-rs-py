@@ -18,6 +18,7 @@ A subscription handler is an async generator — each `yield` becomes one
 SSE data event consumed by the official `httpSubscriptionLink`:
 
 ```python
+# snippet: skip — needs the optional openai package and an API key
 from collections.abc import AsyncIterator
 
 import openai
@@ -90,6 +91,7 @@ metadata and never appears in the generated input type. Use it to
 re-query history or fast-forward the source:
 
 ```python
+# snippet: skip — excerpt; needs router, Token and resume_tokens from above
 @router.subscription
 async def chat(room: str, lastEventId: str | None = None) -> AsyncIterator[Tracked[Token]]:
     async for token in resume_tokens(room, after=lastEventId):

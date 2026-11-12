@@ -11,6 +11,7 @@ framework-agnostic: the same object serves through `mount` (ASGI),
 `mount_wsgi` (WSGI), the Django views, or `trpc-py serve`. Routers compose:
 
 ```python
+# snippet: skip — excerpt; needs the Router import and routers from above
 app_router = Router()
 app_router.nest("posts", posts_router)   # posts.by_id
 app_router.merge(admin_router)           # later entries win collisions
@@ -26,6 +27,7 @@ A procedure is a decorated Python function — its signature is the API
 contract:
 
 ```python
+# snippet: skip — excerpt; needs router, Post, PostInput and AsyncIterator
 @router.query                      # read; GET or POST
 def post_by_id(post_id: int) -> Post: ...
 
@@ -54,6 +56,7 @@ request** — not per batched call. Its return value is injected into
 handlers whose **first parameter is named `ctx`**:
 
 ```python
+# snippet: skip — excerpt; needs the imports and router from the page
 def context_factory(request: RequestContext) -> dict:
     return {"user": current_user(request.headers)}
 
@@ -74,6 +77,7 @@ Middleware is a `(call, next) -> result` callable wrapping one invocation,
 in the tRPC onion model:
 
 ```python
+# snippet: skip — excerpt; needs the router defined above
 @router.use
 async def timing(call, next):
     result = await next()       # run the rest of the chain + handler
@@ -92,6 +96,7 @@ Raise `TRPCError` with an official v11 code — the adapter serializes the
 exact envelope `@trpc/client` expects:
 
 ```python
+# snippet: skip — excerpt; an error raised inside a handler
 raise TRPCError("no such post", code=TRPCErrorCode.NOT_FOUND)
 ```
 
@@ -118,6 +123,7 @@ Events — the same format `@trpc/server` emits, so `httpSubscriptionLink`
 works unchanged:
 
 ```python
+# snippet: skip — excerpt; needs the imports, router and stream_llm_tokens
 class Token(BaseModel):
     seq: int
     text: str
@@ -140,6 +146,7 @@ options; subscriptions cannot be batched. See [subscriptions](subscriptions.md).
 depth, per-call timeout — accepted by every adapter entry point:
 
 ```python
+# snippet: skip — excerpt; needs mount, router and Limits imported
 app = mount(router, limits=Limits(max_body_size=2 * 1024 * 1024,
                                   procedure_timeout=30.0))
 ```

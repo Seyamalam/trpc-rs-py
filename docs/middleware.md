@@ -48,6 +48,7 @@ procedure at decoration time; `use()` affects later registrations, tRPC
 builder semantics). Chains travel with procedures through `merge`/`nest`:
 
 ```python
+# snippet: skip — excerpt; needs audit_middleware defined above
 from trpc_rs_py import Router
 
 router = Router(middleware=[audit_middleware])
@@ -66,6 +67,7 @@ and wraps the procedure's own router chain; the effective chain is
 `(*mount_middleware, *procedure.middleware)`:
 
 ```python
+# snippet: skip — excerpt; needs mount, router and timing_middleware
 app = mount(router, middleware=[timing_middleware()])
 ```
 
@@ -87,6 +89,7 @@ result is the async generator; per-event delivery is not wrapped. See
 ## Built-in helpers
 
 ```python
+from trpc_rs_py import Router
 from trpc_rs_py.middleware import logging_middleware, timing_middleware
 
 router = Router(middleware=[
@@ -114,6 +117,7 @@ bucket when no client address exists. Exceeding the limit raises
 is lock-guarded, so it is safe on event loops and WSGI threads alike.
 
 ```python
+from trpc_rs_py import Router
 from trpc_rs_py.middleware import rate_limit
 
 router = Router(middleware=[rate_limit(120)])                    # per IP
@@ -126,6 +130,7 @@ router = Router(middleware=[rate_limit(120)])                    # per IP
 and raises `UNAUTHORIZED` (HTTP 401) on a falsy verdict:
 
 ```python
+from trpc_rs_py import Router
 from trpc_rs_py.middleware import require_auth
 
 router = Router(middleware=[
@@ -144,6 +149,7 @@ when that is missing. Pass any object with `start_as_current_span` as
 `tracer` to use your own tracer.
 
 ```python
+from trpc_rs_py import Router
 from trpc_rs_py.middleware import tracing_middleware
 
 router = Router(middleware=[tracing_middleware()])

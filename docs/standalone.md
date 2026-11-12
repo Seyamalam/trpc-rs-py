@@ -20,6 +20,7 @@ API it wraps.)
 ## Python API
 
 ```python
+# snippet: skip — starts a server that runs until shutdown
 from trpc_rs_py import Router
 from trpc_rs_py.serve import serve
 
@@ -41,6 +42,7 @@ To serve any ASGI app directly — for example a CORS-wrapped mount — pass
 `app=` instead of a router:
 
 ```python
+# snippet: skip — starts a server; also needs the router from above
 from trpc_rs_py import cors, mount
 from trpc_rs_py.serve import serve
 

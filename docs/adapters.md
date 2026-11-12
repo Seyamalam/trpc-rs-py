@@ -16,6 +16,7 @@ matrix against all five adapters; see `clients/ts-tests`.
 ## ASGI (FastAPI, Starlette)
 
 ```python
+# snippet: skip — excerpt; needs the router from your app module
 from fastapi import FastAPI
 from trpc_rs_py import mount, mount_rest
 
@@ -36,6 +37,7 @@ messages travel a bounded queue so consumers apply real backpressure, and
 closing the response iterable cancels the coroutine.
 
 ```python
+# snippet: skip — excerpt; needs the router from your app module
 from flask import Flask
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from trpc_rs_py import mount_rest, mount_wsgi, wsgi_from_asgi
@@ -75,6 +77,7 @@ require.
 Import from `trpc_rs_py.django` — Django stays an optional dependency.
 
 ```python
+# snippet: skip — excerpt; needs the router from your app module
 # urls.py
 from django.urls import path
 from trpc_rs_py import mount_rest

@@ -48,6 +48,7 @@ first boot:
 and mounts both surfaces:
 
 ```python
+# snippet: skip — template excerpt; {{name}} is substituted at init
 app = FastAPI(title="{{name}}")
 app.mount("/trpc", mount(router))
 app.mount("/api", mount_rest(router, title="{{name}}", version="0.1.0"))

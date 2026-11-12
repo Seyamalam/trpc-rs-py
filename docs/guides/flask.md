@@ -48,6 +48,7 @@ flask --app server run --debug
 When you mount more than the tRPC app, build the dispatcher yourself:
 
 ```python
+# snippet: skip — excerpt; needs app and router from server.py above
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from trpc_rs_py import mount_rest, mount_wsgi, wsgi_from_asgi
