@@ -84,10 +84,25 @@ run_with_timeout() {
 # and the compiled module, check matching versions, exercise the Rust parser.
 write_smoke() {
   cat > "$DIST/smoke.py" <<'PY'
+import re
+
 import trpc_rs_py
 import trpc_rs_py._core as c
 
-assert trpc_rs_py.__version__ == c.__version__, (trpc_rs_py.__version__, c.__version__)
+
+def canon(v):
+    # PEP 440 writes "1.0.0b1"; Cargo semver writes "1.0.0-beta.1".
+    m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:[-.]?(a|b|rc|alpha|beta)\.?(\d+))?", v)
+    if not m:
+        return v
+    pre = f"{m.group(2)[0]}{m.group(3)}" if m.group(2) else ""
+    return m.group(1) + pre
+
+
+assert canon(trpc_rs_py.__version__) == canon(c.__version__), (
+    trpc_rs_py.__version__,
+    c.__version__,
+)
 req = c.parse_request("GET", "ping", "", None, c.Limits())
 assert req.calls[0].path == "ping" and not req.batched
 status, _body = c.build_response([c.CallResult.ok({"ok": True})], batched=False)
