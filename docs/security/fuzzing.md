@@ -90,3 +90,20 @@ without a Rust-level panic. A clean run means no panic, no sanitizer report,
 and no timeout within the bound. The §12 checklist requires 1 hour per target
 before `1.0.0-beta.1`; run `just fuzz-smoke 3600` and confirm
 `fuzz/artifacts/` is empty.
+
+## 1-hour soak result — 2026-11-12 ✅
+
+All four targets ran `cargo fuzz run … -max_total_time=3600` in parallel
+against the committed corpora+seeds. Every run ended `DONE`, exit 0, and
+`fuzz/artifacts/` contains no crash reproducers.
+
+| Target | Executions | Corpus after |
+|---|---|---|
+| `parse_get_query` | 161,055,397 | 1723 files |
+| `parse_post_body` | 147,253,378 | 1710 files |
+| `parse_batch` | 92,609,832 | 1752 files |
+| `sse_encode` | 23,455,916 | 445 files |
+| **Total** | **~424 million** | — |
+
+Raw logs: `/tmp/soak-<target>.log` (ephemeral; regenerate with
+`just fuzz-smoke 3600`).

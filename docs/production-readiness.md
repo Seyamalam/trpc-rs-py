@@ -21,9 +21,9 @@ linked. The release is blocked until all boxes are checked.
   (instrumented `.so` + pytest, `scripts/coverage.sh`; unit-only
   `cargo llvm-cov` under-reads `serve.rs`, which has no `#[cfg(test)]`
   reach — see `docs/coverage.md`).
-- [ ] Fuzzer ran at least 1 hour per target with no crashes (targets exist
-  and pass bounded smoke via `just fuzz-smoke`; the 1-hour soak is
-  outstanding — see `docs/security/fuzzing.md`).
+- [x] Fuzzer ran at least 1 hour per target with no crashes — all four
+  targets, parallel `-max_total_time=3600`, ~424M executions total, zero
+  artifacts (see `docs/security/fuzzing.md` for the run table).
 - [x] All dependency audits clean (`cargo deny` advisories/bans/licenses/sources,
   `pip-audit`, `pnpm audit` — `scripts/audit.sh` exits 0; see
   `docs/security/audit-report.md`).
