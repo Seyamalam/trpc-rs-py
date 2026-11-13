@@ -18,4 +18,5 @@ frontmatter, ```` ```mermaid ```` fences into the `<Mermaid>` component
 (`components/mdx/mermaid.tsx`), relative `.md` links into `/docs/...` URLs,
 and copies assets into `public/`.
 
-Deploy as its own project (Vercel etc.); the site lives under `/docs`.
+Deployed on Vercel: https://trpc-rs-py.vercel.app/docs —
+`pnpm dlx vercel --prod` from this directory redeploys.

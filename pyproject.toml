@@ -18,6 +18,13 @@ classifiers = [
 ]
 dynamic = ["version"]
 
+[project.urls]
+Documentation = "https://trpc-rs-py.vercel.app/docs"
+Homepage = "https://trpc-rs-py.vercel.app"
+Repository = "https://github.com/Seyamalam/trpc-rs-py"
+Issues = "https://github.com/Seyamalam/trpc-rs-py/issues"
+Changelog = "https://github.com/Seyamalam/trpc-rs-py/blob/main/CHANGELOG.md"
+
 [project.scripts]
 trpc-py = "trpc_rs_py.cli:main"
 

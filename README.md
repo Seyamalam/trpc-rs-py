@@ -35,12 +35,13 @@ const greeting = await trpc.greeting.query({ name: "Ada" });
 ![Live type sync — saving `server.py` regenerates `app-router.d.ts`](https://raw.githubusercontent.com/Seyamalam/trpc-rs-py/main/live-types.gif)
 
 > **Status: `1.0.0-beta.1` released — public API frozen; wheels for Linux, macOS, and Windows on PyPI.**
+> **Docs: <https://trpc-rs-py.vercel.app/docs>** — getting started, guides, API reference.
 > Queries, mutations, batching, SSE subscriptions, live type sync
 > (`trpc-py dev`), typed errors, AI streaming helpers, REST + OpenAPI
 > output, CORS/CSRF/rate-limit/auth helpers, a standalone server
 > (`trpc-py serve`), a Python client, and starter templates
 > (`trpc-py init`) all ship today. See [`MISSION.md`](MISSION.md)
-> for the full roadmap and [`docs/feature-matrix.md`](docs/feature-matrix.md)
+> for the full roadmap and [feature matrix](https://trpc-rs-py.vercel.app/docs/feature-matrix)
 > for feature status.
 
 ## Quickstart
@@ -65,7 +66,7 @@ with full types that update live on every Python save.
 - **No lock-in** — the same router can serve REST + an OpenAPI 3.1 document.
 - **Fast** — request parsing, routing, batching, and serialization run in a
   Rust core; the Python adapter adds near-zero overhead over a plain JSON view
-  ([benchmark results](docs/benchmarks.md)).
+  ([benchmark results](https://trpc-rs-py.vercel.app/docs/benchmarks)).
 
 ## Features
 
@@ -85,7 +86,7 @@ with full types that update live on every Python save.
 | Migration + Python client | `@trpc-rs-py/link` routes ops by path; `create_client` for Python callers |
 
 Per-adapter status with test evidence lives in the
-[feature matrix](docs/feature-matrix.md).
+[feature matrix](https://trpc-rs-py.vercel.app/docs/feature-matrix).
 
 ## Benchmarks
 
@@ -96,10 +97,10 @@ stays ~1.8x a plain JSON view on single queries. The official Node
 `@trpc/server` still leads on small requests (no input validation in the
 reference app).
 
-![Requests per second by workload and server](docs/benchmarks/latest-http-rps.svg)
+![Requests per second by workload and server](https://trpc-rs-py.vercel.app/benchmarks/latest-http-rps.svg)
 
 Full tables, latency percentiles, and methodology:
-[docs/benchmarks.md](docs/benchmarks.md).
+[benchmarks](https://trpc-rs-py.vercel.app/docs/benchmarks).
 
 ## Why not FastAPI + OpenAPI codegen?
 

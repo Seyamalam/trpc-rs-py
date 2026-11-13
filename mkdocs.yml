@@ -1,6 +1,6 @@
 site_name: trpc-rs-py
 site_description: tRPC for Python backends, powered by a Rust core
-site_url: https://github.com/Seyamalam/trpc-rs-py
+site_url: https://trpc-rs-py.vercel.app/docs
 strict: true
 
 theme:
