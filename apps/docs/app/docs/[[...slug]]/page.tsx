@@ -53,8 +53,11 @@ export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): P
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  const isIndex = !params.slug || params.slug.length === 0;
   return {
-    title: page.data.title,
+    title: isIndex
+      ? { absolute: 'trpc-rs-py — the Python backend for your tRPC app' }
+      : page.data.title,
     description: page.data.description,
     openGraph: {
       images: getPageImageUrl(page).url,
